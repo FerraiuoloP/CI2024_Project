@@ -95,6 +95,7 @@ class Tree:
     @staticmethod
     def create_random_tree_grow_method(depth, var_to_place=[]):
         #create a tree with full method then prune randomly some branches that do not contain variables
+        #TODO: fare in modo che la depth degli unary_ops non sia 1 (e fare il refactor di questo schifo :) )
         tree = Tree("full")
         # print("Albero full:")
         # tree.print_tree()
@@ -106,15 +107,31 @@ class Tree:
             # print(node)
             var_in_subtree = Tree.find_var_in_subtree(node)
             if np.random.rand()>0.5  and node and node.node_type != NodeType.VAR and len(var_in_subtree)<2:
-                if(len(var_in_subtree))==1:
-                    # print(tree.find_var_in_subtree(node))
-                    node.value=var_in_subtree[0]
-                    node.node_type=NodeType.VAR
+                if(np.random.rand()>0.5):
+                    node.node_type = NodeType.U_OP
+                    node.value = np.random.choice(Tree.unary_ops)
+                    if(len(var_in_subtree))==1:
+                        node.left=Node(NodeType.VAR,value=var_in_subtree[0])
+                    else:
+                        var_left= (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
+                        node.left=Node(NodeType.CONST,value=var_left)
+
+                    node.right = None
+                    node.left.left=None
+                    node.left.right=None
                 else:
-                    node.node_type = NodeType.CONST
-                    node.value = (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
-                node.left = None
-                node.right = None
+                    if(len(var_in_subtree))==1:
+                        node.node_type = NodeType.VAR
+                        node.value = var_in_subtree[0]
+                   
+                    else:
+                        node.node_type = NodeType.CONST
+                        node.value = (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
+                    node.left=None
+                    node.right=None  
+                    
+
+                  
                 
         return tree.root
     
@@ -172,7 +189,7 @@ class Tree:
         subtrees2 = new_tree2.find_subtree_without_var(new_tree2.root)
 
         if not subtrees1 or not subtrees2:
-            return new_tree1, new_tree2  # no subtree to swap.
+            return None,None
         
        
         subtree1 = np.random.choice(subtrees1)
@@ -296,9 +313,10 @@ class Tree:
     
 
     
-
+    
     #if the branches are too deep (over max_depth) collapse the ones that do not contain variables replacing them with their constant value
-    def collapse_branch(self, node, current_depth=0):
+    @staticmethod
+    def collapse_branch(node, current_depth=0):
         if node is None:
             return None
         if current_depth >= Tree.max_depth: 
@@ -314,8 +332,8 @@ class Tree:
                 node.left = None
                 node.right = None
                 return node
-        node.left = self.collapse_branch(node.left, current_depth + 1)
-        node.right = self.collapse_branch(node.right, current_depth + 1)
+        node.left = Tree.collapse_branch(node.left, current_depth + 1)
+        node.right = Tree.collapse_branch(node.right, current_depth + 1)
         return node
 
 
