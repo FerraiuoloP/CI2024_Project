@@ -26,11 +26,11 @@ class Node:
     def clone(self):
         """Creates a deep copy of the current node."""
         new_node = Node(self.node_type, self.value)
-        if self.left is not None:
-            new_node.left = self.left.clone()
-        if self.right is not None:
-            new_node.right = self.right.clone()
+        new_node.left = self.left.clone() if self.left else None
+        new_node.right = self.right.clone() if self.right else None
         return new_node
+    
+
     def to_np_formula(self):
         if self.value is None:
             return None
@@ -39,27 +39,27 @@ class Node:
         if self.node_type == NodeType.VAR:
             return self.value
         if self.node_type == NodeType.U_OP:
-            if self.right is None:
-                left = self.left.to_np_formula()
-                return "np."+self.value.__name__+"("+left+")"
-            
-            right = self.right.to_np_formula()
-            return "np."+self.value.__name__+"("+right+")"
+            operand = self.left.to_np_formula() if self.right is None else self.right.to_np_formula()
+            return f"np.{self.value.__name__}({operand})"
         if self.node_type == NodeType.B_OP:
             left = self.left.to_np_formula()
             right = self.right.to_np_formula()
-            return "np."+self.value.__name__+"("+left+","+right+")"
+            return f"np.{self.value.__name__}({left}, {right})"
 
 class Tree:
-    def __init__(self, method="full"):
+    def __init__(self, method="full",require_valid_tree=True,empty=False):
+        #Valid tree means a tree that has a computable fitness (no division by zero, no overflow, etc.)
         self.fitness = np.inf
         vars = [f'x{i}' for i in range(Tree.n_var)]
-        while self.fitness == np.inf:
+        self.root = None
+        while not empty and self.fitness == np.inf:
             if method == "full":
                 self.root = self.create_random_tree_full_method(Tree.max_depth, vars)
             elif method == "grow":
                 self.root = self.create_random_tree_grow_method(Tree.max_depth, vars)
             self.compute_fitness()
+            if not require_valid_tree:
+                break
             
 
     @staticmethod
@@ -78,7 +78,7 @@ class Tree:
         for var in var_to_place:
             leaves.append(Node(NodeType.VAR, value=var))
         while len(leaves) < 2 ** depth:
-            leaves.append(Node(NodeType.CONST, value=np.random.uniform(-Tree.max_const, Tree.max_const)))
+            leaves.append(Node(NodeType.CONST, value=(-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())))
 
         def build_tree(nodes, current_depth):
             if current_depth == depth:
@@ -99,20 +99,20 @@ class Tree:
         # print("Albero full:")
         # tree.print_tree()
         # tree.add_drawing()
-        # print("PEFFOOOOOOOO2")
         nodes = tree.collect_nodes(tree.root)
-        # print("PEFFOOOOOOOO")
         # nodes2=[node.clone() for node in nodes]
+        
         for node in nodes:
             # print(node)
-            if np.random.rand()>0.5  and node and node.node_type != NodeType.VAR and len(tree.find_var_in_subtree(node))<2:
-                if(len(tree.find_var_in_subtree(node)))==1:
+            var_in_subtree = Tree.find_var_in_subtree(node)
+            if np.random.rand()>0.5  and node and node.node_type != NodeType.VAR and len(var_in_subtree)<2:
+                if(len(var_in_subtree))==1:
                     # print(tree.find_var_in_subtree(node))
-                    node.value=tree.find_var_in_subtree(node)[0]
+                    node.value=var_in_subtree[0]
                     node.node_type=NodeType.VAR
                 else:
                     node.node_type = NodeType.CONST
-                    node.value = np.random.uniform(-Tree.max_const, Tree.max_const)
+                    node.value = (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
                 node.left = None
                 node.right = None
                 
@@ -136,7 +136,7 @@ class Tree:
         index = np.random.randint(0, len(nodes))
         node_to_replace = nodes[index]
         depth_of_node = self.get_depth(self.root, node_to_replace)
-        var_in_subtree = self.find_var_in_subtree(node_to_replace)
+        var_in_subtree = Tree.find_var_in_subtree(node_to_replace)
         min_depth = 0
         if var_in_subtree:  
             min_depth = math.ceil(math.log2(len(var_in_subtree)))  
@@ -153,7 +153,7 @@ class Tree:
         nodes_to_mutate = [node for node in nodes if node.node_type != NodeType.VAR]
         node_to_mutate = np.random.choice(nodes_to_mutate)
         if node_to_mutate.node_type == NodeType.CONST:
-            node_to_mutate.value = np.random.uniform(-Tree.max_const, Tree.max_const)
+            node_to_mutate.value = (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
         elif node_to_mutate.node_type == NodeType.B_OP:
             node_to_mutate.value = np.random.choice(Tree.binary_ops)
         elif node_to_mutate.node_type == NodeType.U_OP:
@@ -163,8 +163,8 @@ class Tree:
 
     @staticmethod
     def crossover(tree1, tree2):
-        new_tree1 = Tree()
-        new_tree2 = Tree()
+        new_tree1 = Tree(empty=True)
+        new_tree2 = Tree(empty=True)
         new_tree1.root = tree1.root.clone()
         new_tree2.root = tree2.root.clone()
 
@@ -189,7 +189,7 @@ class Tree:
         if node is None:
             return []
         subtrees = []
-        if node.node_type != NodeType.VAR and not self.find_var_in_subtree(node):
+        if node.node_type != NodeType.VAR and not Tree.find_var_in_subtree(node):
             subtrees.append(node)
         subtrees += self.find_subtree_without_var(node.left)
         subtrees += self.find_subtree_without_var(node.right)
@@ -200,13 +200,14 @@ class Tree:
             return []
         return [node] + self.collect_nodes(node.left) + self.collect_nodes(node.right)
     
-    def find_var_in_subtree(self, node):
+    @staticmethod
+    def find_var_in_subtree(node):
         if node is None or node.node_type == NodeType.CONST:
             return []
         if node.node_type == NodeType.VAR:
             return [node.value]  
-        var_l = self.find_var_in_subtree(node.left)
-        var_r = self.find_var_in_subtree(node.right)
+        var_l = Tree.find_var_in_subtree(node.left)
+        var_r = Tree.find_var_in_subtree(node.right)
         return list(var_l + var_r)
     
     def get_depth(self, root, target_node, depth=0):
@@ -235,33 +236,18 @@ class Tree:
             return node.value(Tree._evaluate_tree_recursive(node.right, x))
         if node.node_type == NodeType.B_OP:
             # print(f"calculating {node.value.__name__} of {self._evaluate_tree_recursive(node.left, x)} and {self._evaluate_tree_recursive(node.right, x)}, the result is {node.value(self._evaluate_tree_recursive(node.left, x), self._evaluate_tree_recursive(node.right, x))}")
-            return node.value(
-                Tree._evaluate_tree_recursive(node.left, x), 
-                Tree._evaluate_tree_recursive(node.right, x)
-            )
-      
+            try:
+                with np.errstate(all='raise'):#to catch exceptions in numpy
+
+                    return node.value(
+                        Tree._evaluate_tree_recursive(node.left, x), 
+                        Tree._evaluate_tree_recursive(node.right, x)
+                    )
+            except (OverflowError, ZeroDivisionError, ValueError, RuntimeError, FloatingPointError):
+                return np.nan
+        
 
         
-    # def compute_fitness(self):
-    #     self.tmp = []
-    #     try:
-    #         # y_pred = np.array([self.evaluate_tree(x) for x in self.x_train.T])
-    #         # if(np.isnan(y_pred)):
-    #         #         self.fitness = np.inf
-    #         #         return
-    #         # self.fitness = np.mean((y_pred - self.y_train) ** 2)
-    #         # return
-    #         for i in range(self.x_train.shape[0]):
-    #             # print(self.x_train[:,i])
-    #             y_pred = self.evaluate_tree(self.x_train[:,i])
-    #             if(np.isnan(y_pred)):
-    #                 self.fitness = np.inf
-    #                 return
-    #             self.tmp.append((self.y_train[i]- y_pred ) ** 2)
-                
-    #         self.fitness = np.mean(self.tmp)
-    #     except (OverflowError, ZeroDivisionError, ValueError, RuntimeWarning):
-    #         self.fitness=np.inf
 
     def compute_fitness(self):
         try:
@@ -277,13 +263,15 @@ class Tree:
                 if np.isnan(y_pred):
                     self.fitness = np.inf
                     return
-                squared_errors += (self.y_train[i] - y_pred) ** 2
-            
-            self.fitness = squared_errors / self.x_train.shape[1]
+                with np.errstate(all='raise'): #to raise exceptions in numpy
+                    squared_errors += (self.y_train[i] - y_pred) ** 2
+                
+                    self.fitness = squared_errors / self.x_train.shape[1]
 
-        except (OverflowError, ZeroDivisionError, ValueError, RuntimeError):  # Catch RuntimeWarning as RuntimeError
+        except (OverflowError, ZeroDivisionError, ValueError, RuntimeError, FloatingPointError):  # Catch RuntimeWarning as RuntimeError
             self.fitness = np.inf
-
+            return
+    
     def add_drawing(self):
         """Draws the tree using matplotlib."""
         def draw_node(node, x, y, dx, dy):
@@ -309,19 +297,19 @@ class Tree:
 
     
 
-        
+    #if the branches are too deep (over max_depth) collapse the ones that do not contain variables replacing them with their constant value
     def collapse_branch(self, node, current_depth=0):
         if node is None:
             return None
-        if(current_depth==0):
-            return node
-        if current_depth > Tree.max_depth: # 1 di margine
-            vars_in_subtree = self.find_var_in_subtree(node)
-            if len(vars_in_subtree) == 0:
-                node.node_type = NodeType.CONST
-                # print("collapsed")
-                ev = Tree._evaluate_tree_recursive(node, np.zeros(Tree.n_var))
+        if current_depth >= Tree.max_depth: 
+            vars_in_subtree = Tree.find_var_in_subtree(node)
+            if len(vars_in_subtree) == 0 and node.node_type != NodeType.CONST:
                 
+                # print("collapsed")
+                
+                ev = Tree._evaluate_tree_recursive(node, np.zeros(Tree.n_var))
+
+                node.node_type = NodeType.CONST
                 node.value = float(ev)  
                 node.left = None
                 node.right = None
@@ -369,7 +357,7 @@ binary_ops = [
 def main():
     Tree.set_params(unary_ops, binary_ops, 3, 100,4, np.array([[1,2,3],[1,2,3],[1,2,3]]),np.array([1,2,3]))
     t=Tree("grow")
-    print("PEFFOOOOOOOO")
+  
     t.print_tree()
     t.add_drawing()
 if __name__ == "__main__":
