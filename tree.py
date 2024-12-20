@@ -70,6 +70,8 @@ class Tree:
         Tree.max_const = max_const
         Tree.x_train = x_train
         Tree.y_train = y_train
+        # Tree.x_test = x_test
+        # Tree.y_test = y_test
         Tree.max_depth = max_depth
     
     @staticmethod
