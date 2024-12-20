@@ -106,7 +106,7 @@ class Tree:
         for node in nodes:
             # print(node)
             var_in_subtree = Tree.find_var_in_subtree(node)
-            if np.random.rand()>0.5  and node and node.node_type != NodeType.VAR and len(var_in_subtree)<2:
+            if np.random.rand()>0.5  and node and node.node_type != NodeType.VAR and len(var_in_subtree)<2: #if the subtree has oly one variable we can prune it
                 if(np.random.rand()>0.5):
                     node.node_type = NodeType.U_OP
                     node.value = np.random.choice(Tree.unary_ops)
@@ -164,6 +164,12 @@ class Tree:
         node_to_replace.value = new_subtree.value
         node_to_replace.left = new_subtree.left
         node_to_replace.right = new_subtree.right
+
+    def copy_tree(self):
+        new_tree = Tree(empty=True)
+        new_tree.root = self.root.clone()
+        new_tree.fitness = self.fitness
+        return new_tree
 
     def mutate_single_node(self):
         nodes = self.collect_nodes(self.root)
@@ -242,31 +248,32 @@ class Tree:
     
     @staticmethod
     def _evaluate_tree_recursive(node, x):
-        if node.node_type == NodeType.VAR:
-            number = int(node.value[1:])
-            return x[number]
-        if node.node_type == NodeType.CONST:
-            return node.value
-        if node.node_type == NodeType.U_OP:
-            if node.right is None:
-                return node.value(Tree._evaluate_tree_recursive(node.left, x))
-            return node.value(Tree._evaluate_tree_recursive(node.right, x))
-        if node.node_type == NodeType.B_OP:
-            # print(f"calculating {node.value.__name__} of {self._evaluate_tree_recursive(node.left, x)} and {self._evaluate_tree_recursive(node.right, x)}, the result is {node.value(self._evaluate_tree_recursive(node.left, x), self._evaluate_tree_recursive(node.right, x))}")
-            try:
-                with np.errstate(all='raise'):#to catch exceptions in numpy
+        try:
+            with np.errstate(all='raise'):#to catch exceptions in numpy
+                if node.node_type == NodeType.VAR:
+                    number = int(node.value[1:])
+                    return x[number]
+                if node.node_type == NodeType.CONST:
+                    return node.value
+                if node.node_type == NodeType.U_OP:
+                    if node.right is None:
+                        return node.value(Tree._evaluate_tree_recursive(node.left, x))
+                    return node.value(Tree._evaluate_tree_recursive(node.right, x))
+                if node.node_type == NodeType.B_OP:
+                    # print(f"calculating {node.value.__name__} of {self._evaluate_tree_recursive(node.left, x)} and {self._evaluate_tree_recursive(node.right, x)}, the result is {node.value(self._evaluate_tree_recursive(node.left, x), self._evaluate_tree_recursive(node.right, x))}")
+                
 
                     return node.value(
                         Tree._evaluate_tree_recursive(node.left, x), 
                         Tree._evaluate_tree_recursive(node.right, x)
                     )
-            except (OverflowError, ZeroDivisionError, ValueError, RuntimeError, FloatingPointError):
-                return np.nan
+        except (OverflowError, ZeroDivisionError, ValueError, RuntimeError, FloatingPointError):
+            return np.nan
         
 
         
-
-    def compute_fitness(self):
+    #mean squared error
+    def compute_fitness(self): 
         try:
             if self.x_train.shape[0] == 0:
                 self.fitness = np.inf
@@ -336,38 +343,40 @@ class Tree:
         node.right = Tree.collapse_branch(node.right, current_depth + 1)
         return node
 
+    def __lt__(self, other):
+        return self.fitness > other.fitness
+    
 
 
-   
 
      
 
-unary_ops = [
-    np.negative,
-    np.abs,
-    np.sqrt,
-    np.exp,
-    np.log,
-    np.sin,
-    np.cos,
-    np.tan,
-    np.arcsin,
-    np.arccos,
-    np.arctan,
-    np.ceil,
-    np.floor
-]
+# unary_ops = [
+#     np.negative,
+#     np.abs,
+#     np.sqrt,
+#     np.exp,
+#     np.log,
+#     np.sin,
+#     np.cos,
+#     np.tan,
+#     np.arcsin,
+#     np.arccos,
+#     np.arctan,
+#     np.ceil,
+#     np.floor
+# ]
 
-binary_ops = [
-    np.add,
-    np.subtract,
-    np.multiply,
-    np.divide,
-    np.power,
-    np.maximum,
-    np.minimum,
-    np.mod
-]
+# binary_ops = [
+#     np.add,
+#     np.subtract,
+#     np.multiply,
+#     np.divide,
+#     np.power,
+#     np.maximum,
+#     np.minimum,
+#     np.mod
+# ]
 
 # Tree.set_params(unary_ops, binary_ops, 3, 10)  
 # t = Tree(2)
