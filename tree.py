@@ -2,6 +2,8 @@ import math
 from enum import Enum
 import numpy as np
 import matplotlib.pyplot as plt  
+from functools import lru_cache
+
 
 class NodeType(Enum):
     B_OP = 1
@@ -47,8 +49,11 @@ class Node:
             return f"np.{self.value.__name__}({left}, {right})"
 
 class Tree:
+    _memo_cache = {}
+    _cache_limit = 1000  # Set the cache size limit
     def __init__(self, method="full",require_valid_tree=True,empty=False):
         #Valid tree means a tree that has a computable fitness (no division by zero, no overflow, etc.)
+        
         self.fitness = np.inf
         vars = [f'x{i}' for i in range(Tree.n_var)]
         self.root = None
@@ -63,15 +68,15 @@ class Tree:
             
 
     @staticmethod
-    def set_params(unary_ops, binary_ops, n_var, max_const,max_depth, x_train, y_train):
+    def set_params(unary_ops, binary_ops, n_var, max_const,max_depth, x_train, y_train, x_test=None, y_test=None):
         Tree.unary_ops = unary_ops
         Tree.binary_ops = binary_ops
         Tree.n_var = n_var
         Tree.max_const = max_const
         Tree.x_train = x_train
         Tree.y_train = y_train
-        # Tree.x_test = x_test
-        # Tree.y_test = y_test
+        Tree.x_test = x_test
+        Tree.y_test = y_test
         Tree.max_depth = max_depth
     
     @staticmethod
@@ -248,55 +253,109 @@ class Tree:
     def evaluate_tree(self, x):
         return Tree._evaluate_tree_recursive(self.root, x)
     
+    #OLD IMPLEMENTATION, can be deleted?
+    # @staticmethod
+    # def _evaluate_tree_recursive(node, x):
+    #     try:
+    #         with np.errstate(all='raise'):#to catch exceptions in numpy
+    #             if node.node_type == NodeType.VAR:
+    #                 number = int(node.value[1:])
+    #                 return x[number]
+    #             if node.node_type == NodeType.CONST:
+    #                 return node.value
+    #             if node.node_type == NodeType.U_OP:
+    #                 if node.right is None:
+    #                     return node.value(Tree._evaluate_tree_recursive(node.left, x))
+    #                 return node.value(Tree._evaluate_tree_recursive(node.right, x))
+    #             if node.node_type == NodeType.B_OP:
+    #                 # print(f"calculating {node.value.__name__} of {self._evaluate_tree_recursive(node.left, x)} and {self._evaluate_tree_recursive(node.right, x)}, the result is {node.value(self._evaluate_tree_recursive(node.left, x), self._evaluate_tree_recursive(node.right, x))}")
+                
+
+    #                 return node.value(
+    #                     Tree._evaluate_tree_recursive(node.left, x), 
+    #                     Tree._evaluate_tree_recursive(node.right, x)
+    #                 )
+    #     except (OverflowError, ZeroDivisionError, ValueError, RuntimeError, FloatingPointError):
+    #         return np.nan
+    
+    
     @staticmethod
     def _evaluate_tree_recursive(node, x):
-        try:
-            with np.errstate(all='raise'):#to catch exceptions in numpy
-                if node.node_type == NodeType.VAR:
-                    number = int(node.value[1:])
-                    return x[number]
-                if node.node_type == NodeType.CONST:
-                    return node.value
+        # Create a unique cache key for this node and input
+        # Check if result is already cached
+        if node.node_type == NodeType.VAR:
+            number = int(node.value[1:])
+            result = x[number]
+        elif node.node_type == NodeType.CONST:
+            result = node.value
+        else:
+                #check if result is already cached
+                cache_key = (node.value.__name__, id(node.left), id(node.right), x.tobytes())
+                if cache_key in Tree._memo_cache:
+                    return Tree._memo_cache[cache_key]
                 if node.node_type == NodeType.U_OP:
                     if node.right is None:
-                        return node.value(Tree._evaluate_tree_recursive(node.left, x))
-                    return node.value(Tree._evaluate_tree_recursive(node.right, x))
-                if node.node_type == NodeType.B_OP:
-                    # print(f"calculating {node.value.__name__} of {self._evaluate_tree_recursive(node.left, x)} and {self._evaluate_tree_recursive(node.right, x)}, the result is {node.value(self._evaluate_tree_recursive(node.left, x), self._evaluate_tree_recursive(node.right, x))}")
-                
-
-                    return node.value(
-                        Tree._evaluate_tree_recursive(node.left, x), 
+                        result = node.value(Tree._evaluate_tree_recursive(node.left, x))
+                    else:
+                        result = node.value(Tree._evaluate_tree_recursive(node.right, x))
+                elif node.node_type == NodeType.B_OP:
+                    result = node.value(
+                        Tree._evaluate_tree_recursive(node.left, x),
                         Tree._evaluate_tree_recursive(node.right, x)
                     )
-        except (OverflowError, ZeroDivisionError, ValueError, RuntimeError, FloatingPointError):
-            return np.nan
-        
-
-        
-    #mean squared error
-    def compute_fitness(self): 
-        try:
-            if self.x_train.shape[0] == 0:
-                self.fitness = np.inf
-                return
-
-            squared_errors = 0
-           
-            # print(self.x_train.shape[1])
-            for i in range(self.x_train.shape[1]):
-                y_pred = self.evaluate_tree(self.x_train[:, i])
-                if np.isnan(y_pred):
-                    self.fitness = np.inf
-                    return
-                with np.errstate(all='raise'): #to raise exceptions in numpy
-                    squared_errors += (self.y_train[i] - y_pred) ** 2
                 
-                    self.fitness = squared_errors / self.x_train.shape[1]
+                Tree._memo_cache[cache_key] = result
+                if len(Tree._memo_cache) > Tree._cache_limit:
+                 Tree._memo_cache.popitem() 
+        
+        return result
+        
 
-        except (OverflowError, ZeroDivisionError, ValueError, RuntimeError, FloatingPointError):  # Catch RuntimeWarning as RuntimeError
+    #OLD IMPLEMENTATION, can be deleted?
+    # #mean squared error
+    # def compute_fitness(self,test=False):
+    #     x_data = Tree.x_test if test else Tree.x_train
+    #     y_data = Tree.y_test if test else Tree.y_train
+    #     try:
+    #         if x_data.shape[0] == 0:
+    #             self.fitness = np.inf
+    #             return
+    #         squared_errors = 0
+    #         # print(x_data.shape[1])
+    #         for i in range(x_data.shape[1]):
+    #             y_pred = self.evaluate_tree(x_data[:, i])
+    #             if np.isnan(y_pred) or np.isinf(y_pred):
+    #                 self.fitness = np.inf
+    #                 return
+    #             with np.errstate(all='raise'): #to raise exceptions in numpy
+    #                 squared_errors += (y_data[i] - y_pred) ** 2
+                
+    #                 self.fitness = squared_errors / x_data.shape[1]
+
+    #     except (OverflowError, ZeroDivisionError, ValueError, RuntimeError, FloatingPointError):  # Catch RuntimeWarning as RuntimeError
+    #         self.fitness = np.inf
+    #         return
+        
+
+
+    #mean squared error
+    def compute_fitness(self,test=False):
+        x_data = Tree.x_test if test else Tree.x_train
+        y_data = Tree.y_test if test else Tree.y_train
+        if x_data.shape[0] == 0 or x_data.shape[1] == 0:
             self.fitness = np.inf
             return
+        squared_errors = 0
+        # print(x_data.shape[1])
+        for i in range(x_data.shape[1]):
+            y_pred = self.evaluate_tree(x_data[:, i])
+            if np.isnan(y_pred) or np.isinf(y_pred):
+                self.fitness = np.inf
+                return
+            squared_errors += (y_data[i] - y_pred) ** 2
+        self.fitness = squared_errors / x_data.shape[1]
+
+        return       
     
     def add_drawing(self):
         """Draws the tree using matplotlib."""
@@ -325,10 +384,10 @@ class Tree:
     
     #if the branches are too deep (over max_depth) collapse the ones that do not contain variables replacing them with their constant value
     @staticmethod
-    def collapse_branch(node, current_depth=0):
+    def collapse_branch(node, current_depth=0,force_collapse=False):
         if node is None:
             return None
-        if current_depth >= Tree.max_depth: 
+        if current_depth >= Tree.max_depth or force_collapse: 
             vars_in_subtree = Tree.find_var_in_subtree(node)
             if len(vars_in_subtree) == 0 and node.node_type != NodeType.CONST:
                 
@@ -341,9 +400,11 @@ class Tree:
                 node.left = None
                 node.right = None
                 return node
-        node.left = Tree.collapse_branch(node.left, current_depth + 1)
-        node.right = Tree.collapse_branch(node.right, current_depth + 1)
+        node.left = Tree.collapse_branch(node.left, current_depth + 1,force_collapse=force_collapse)
+        node.right = Tree.collapse_branch(node.right, current_depth + 1,force_collapse=force_collapse)
         return node
+    
+
 
     def __lt__(self, other):
         return self.fitness > other.fitness
