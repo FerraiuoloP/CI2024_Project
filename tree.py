@@ -41,7 +41,7 @@ class Node:
         if self.node_type == NodeType.VAR:
             return self.value
         if self.node_type == NodeType.U_OP:
-            operand = self.left.to_np_formula() if self.right is None else self.right.to_np_formula()
+            operand = self.right.to_np_formula() if self.left is None else self.left.to_np_formula()
             return f"np.{self.value.__name__}({operand})"
         if self.node_type == NodeType.B_OP:
             left = self.left.to_np_formula()
@@ -50,92 +50,156 @@ class Node:
 
 class Tree:
     _memo_cache = {}
-    _cache_limit = 1000  # Set the cache size limit
-    def __init__(self, method="full",require_valid_tree=True,empty=False):
-        #Valid tree means a tree that has a computable fitness (no division by zero, no overflow, etc.)
-        
-        self.fitness = np.inf
-        vars = [f'x{i}' for i in range(Tree.n_var)]
-        self.root = None
-        while not empty and self.fitness == np.inf:
-            if method == "full":
-                self.root = self.create_random_tree_full_method(Tree.max_depth, vars)
-            elif method == "grow":
-                self.root = self.create_random_tree_grow_method(Tree.max_depth, vars)
-            self.compute_fitness()
-            if not require_valid_tree:
-                break
-            
-
+    _cache_limit = 1000  # NOTE: lower this value if it slows down the program because the pc memory is full
+    _VAR_DUP_PROB = 0.15 # NOTE: keep this low for now since we need to implement properly the mutation and recombination of trees with duplicated variables
     @staticmethod
     def set_params(unary_ops, binary_ops, n_var, max_const,max_depth, x_train, y_train, x_test=None, y_test=None):
         Tree.unary_ops = unary_ops
         Tree.binary_ops = binary_ops
         Tree.n_var = n_var
+        Tree.vars = [f'x{i}' for i in range(Tree.n_var)]
         Tree.max_const = max_const
         Tree.x_train = x_train
         Tree.y_train = y_train
         Tree.x_test = x_test
         Tree.y_test = y_test
         Tree.max_depth = max_depth
+
+
+
+    def __init__(self, method="full",require_valid_tree=True,empty=False):
+        #Valid tree means a tree that has a computable fitness (no division by zero, no overflow, etc.)
+        
+        self.fitness = np.inf
+        
+        self.root = None
+        while not empty and self.fitness == np.inf:
+            if method == "full":
+                self.root = self.create_random_tree_full_method()
+            elif method == "grow":
+                self.root = self.create_random_tree_grow_method()
+            self.compute_fitness()
+            if not require_valid_tree:
+                break
+            
     
     @staticmethod
-    def create_random_tree_full_method(depth, var_to_place=[]):
+    def create_random_tree_full_method():
         leaves = []
-        for var in var_to_place:
+        #First create the leaves of the tree. Every variable should be placed in the tree at least once!
+        for var in  Tree.vars:
             leaves.append(Node(NodeType.VAR, value=var))
-        while len(leaves) < 2 ** depth:
-            leaves.append(Node(NodeType.CONST, value=(-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())))
+        while len(leaves) < 2 ** Tree.max_depth:
+            if(np.random.rand()<Tree._VAR_DUP_PROB): #Duplicate a variable
+                leaves.append(Node(NodeType.VAR, value=np.random.choice(Tree.vars)))
+            else:
+                leaves.append(Node(NodeType.CONST, value=(-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())))
 
-        def build_tree(nodes, current_depth):
-            if current_depth == depth:
-                return nodes.pop(0)
+        #Then build the tree recursively
+        def build_tree(leaves_to_place, current_depth):
+            if current_depth == Tree.max_depth:
+                return leaves_to_place.pop(0)
 
             node = Node(NodeType.B_OP, value=np.random.choice(Tree.binary_ops))
-            node.left = build_tree(nodes, current_depth + 1)
-            node.right = build_tree(nodes, current_depth + 1)
+            node.left = build_tree(leaves_to_place, current_depth + 1)
+            node.right = build_tree(leaves_to_place, current_depth + 1)
             return node
 
         np.random.shuffle(leaves)
         return build_tree(leaves, 0)
 
     @staticmethod
-    def create_random_tree_grow_method(depth, var_to_place=[]):
-        #create a tree with full method then prune randomly some branches that do not contain variables
-        #TODO: fare in modo che la depth degli unary_ops non sia 1 (e fare il refactor di questo schifo :) )
-        tree = Tree("full")
-        # print("Albero full:")
-        # tree.print_tree()
-        # tree.add_drawing()
-        nodes = tree.collect_nodes(tree.root)
-        # nodes2=[node.clone() for node in nodes]
+    def create_random_tree_grow_method():
+        #Pick a number of leaves between Tree.n_var and 2^max_depth
+        n_leaves = np.random.randint(Tree.n_var, 2 ** Tree.max_depth +1)#+1 cause high val is exclusive
         
-        for node in nodes:
-            # print(node)
-            var_in_subtree = Tree.find_var_in_subtree(node)
-            if np.random.rand()>0.5  and node and node.node_type != NodeType.VAR and len(var_in_subtree)<2: #if the subtree has oly one variable we can prune it
-                if(np.random.rand()>0.5):
-                    node.node_type = NodeType.U_OP
-                    node.value = np.random.choice(Tree.unary_ops)
-                    if(len(var_in_subtree))==1:
-                        node.left=Node(NodeType.VAR,value=var_in_subtree[0])
-                    else:
-                        var_left= (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
-                        node.left=Node(NodeType.CONST,value=var_left)
+        #Create the leaves of the tree. Every variable should be placed in the tree at least once!
+        leaves = []
+        for var in  Tree.vars:
+            leaves.append(Node(NodeType.VAR, value=var))
+        for _ in range(n_leaves - Tree.n_var):
+            if(np.random.rand()<Tree._VAR_DUP_PROB): #Duplicate a variable
+                leaves.append(Node(NodeType.VAR, value=np.random.choice(Tree.vars)))
+            else:
+                leaves.append(Node(NodeType.CONST, value=(-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())))
 
-                    node.right = None
-                    node.left.left=None
-                    node.left.right=None
+        #Then build the tree recursively
+        def build_tree(leaves_to_place, current_depth):
+            if current_depth == Tree.max_depth:#enter here only if the previous node was an unary operator and we reached the max depth
+                return leaves_to_place.pop(0)
+            subtree_max_leaves=2**(Tree.max_depth-(current_depth+1)) #max number of leaves that can be placed in a subtree
+
+            #place a leaf with a certain probability if the subtree has only one leaf to place
+            if(np.random.rand()<0.5 and len(leaves_to_place)==1): 
+                node=leaves_to_place.pop(0)
+                return node
+            
+            #if the subtree has only one leaf to place (and it has not been placed in the crrent node) 
+            # OR np.random.rand()<PROB and the single subtree has enough space to place all the leaves
+            #place a unary operator
+            if(len(leaves_to_place)==1 or (np.random.rand()<0.3 and len(leaves_to_place)>0 and len(leaves_to_place)<=subtree_max_leaves) ): 
+                node=Node(NodeType.U_OP,value=np.random.choice(Tree.unary_ops))
+                node.left=build_tree(leaves_to_place, current_depth + 1)
+                return node
+            
+            #code from now on is executed only if the subtree has more than one leaf to place and will place a binary operator
+            if(len(leaves_to_place)<1):
+                print("Error: not enough leaves to place")
+            place_on_right=None #setting to None to enter the while loop
+            while place_on_right is None or place_on_right> subtree_max_leaves: #loop until also the right subtree has enough space to place the leaves
+                #pick number of leaves to place on the left then calculate the number of leaves to place on the right
+                if(len(leaves_to_place)>subtree_max_leaves):
+                    place_on_left=np.random.randint(1,subtree_max_leaves+1)
                 else:
-                    if(len(var_in_subtree))==1:
-                        node.node_type = NodeType.VAR
-                        node.value = var_in_subtree[0]
+                    place_on_left=np.random.randint(1,len(leaves_to_place)) #not using +1 even if high value is exclusive because otherwise we risk having right subtree with 0 leaves
+                place_on_right=len(leaves_to_place)-place_on_left
+                
+            node = Node(NodeType.B_OP, value=np.random.choice(Tree.binary_ops))
+            node.left = build_tree(leaves_to_place[0:place_on_left], current_depth + 1)
+            node.right = build_tree(leaves_to_place[place_on_left:], current_depth + 1)
+            return node
+                
+        np.random.shuffle(leaves)
+        return build_tree(leaves, 0)
+           
+            
+
+
+        #TODO: delete if the new implementation works (it should)
+        # #create a tree with full method then prune randomly some branches that do not contain variables
+        # tree = Tree("full")
+        # # print("Albero full:")
+        # # tree.print_tree()
+        # # tree.add_drawing()
+        # nodes = tree.collect_nodes(tree.root)
+        # # nodes2=[node.clone() for node in nodes]
+        
+        # for node in nodes:
+        #     # print(node)
+        #     var_in_subtree = Tree.find_var_in_subtree(node)
+        #     if np.random.rand()>0.5  and node and node.node_type != NodeType.VAR and len(var_in_subtree)<2: #if the subtree has oly one variable we can prune it
+        #         if(np.random.rand()>0.5):
+        #             node.node_type = NodeType.U_OP
+        #             node.value = np.random.choice(Tree.unary_ops)
+        #             if(len(var_in_subtree))==1:
+        #                 node.left=Node(NodeType.VAR,value=var_in_subtree[0])
+        #             else:
+        #                 var_left= (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
+        #                 node.left=Node(NodeType.CONST,value=var_left)
+
+        #             node.right = None
+        #             node.left.left=None
+        #             node.left.right=None
+        #         else:
+        #             if(len(var_in_subtree))==1:
+        #                 node.node_type = NodeType.VAR
+        #                 node.value = var_in_subtree[0]
                    
-                    else:
-                        node.node_type = NodeType.CONST
-                        node.value = (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
-                    node.left=None
-                    node.right=None  
+        #             else:
+        #                 node.node_type = NodeType.CONST
+        #                 node.value = (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
+        #             node.left=None
+        #             node.right=None  
                     
 
                   
@@ -155,14 +219,16 @@ class Tree:
         else:
             print("  " * depth + "None")
     
+
+    #TODO:change so that if a variable is duplicated somewhere else it can be safely removed. Add the possibility to duplicate a variable.
     def mutate_subtree(self):
-        nodes = self.collect_nodes(self.root)
-        index = np.random.randint(0, len(nodes))
-        node_to_replace = nodes[index]
+        variables,other_nodes = self.collect_nodes(self.root)
+        all_nodes = variables+other_nodes
+        index = np.random.randint(0, len(all_nodes))
+        node_to_replace = all_nodes[index]
         depth_of_node = self.get_depth(self.root, node_to_replace)
-        var_in_subtree = Tree.find_var_in_subtree(node_to_replace)
-        min_depth = 0
-        if var_in_subtree:  
+        var_in_subtree,_ = self.collect_nodes(node_to_replace)
+        if var_in_subtree:
             min_depth = math.ceil(math.log2(len(var_in_subtree)))  
         max_possible_depth = Tree.max_depth - depth_of_node
         subtree_depth = max(min_depth, 0) if min_depth >= max_possible_depth else np.random.randint(min_depth, max_possible_depth)
@@ -190,7 +256,7 @@ class Tree:
             node_to_mutate.value = np.random.choice(Tree.unary_ops)
     
   
-
+    #TODO:change so that it can find subtree with variables if it is duplicated somewhere else
     @staticmethod
     def crossover(tree1, tree2):
         new_tree1 = Tree(empty=True)
@@ -225,10 +291,20 @@ class Tree:
         subtrees += self.find_subtree_without_var(node.right)
         return subtrees
 
+    #returns a tuple of two lists, the first one contains the variables in the subtree, the second one contains the other nodes
     def collect_nodes(self, node):
         if node is None:
             return []
-        return [node] + self.collect_nodes(node.left) + self.collect_nodes(node.right)
+        left_variables,left_others=self.collect_nodes(node.left)
+        right_variables,right_others=self.collect_nodes(node.right)
+
+        variables=left_variables+right_variables
+        others=left_others+right_others
+
+        if node.node_type == NodeType.VAR:
+            return variables+[node],others
+        else:
+            return variables,others+[node]
     
     @staticmethod
     def find_var_in_subtree(node):
@@ -414,41 +490,42 @@ class Tree:
 
      
 
-# unary_ops = [
-#     np.negative,
-#     np.abs,
-#     np.sqrt,
-#     np.exp,
-#     np.log,
-#     np.sin,
-#     np.cos,
-#     np.tan,
-#     np.arcsin,
-#     np.arccos,
-#     np.arctan,
-#     np.ceil,
-#     np.floor
-# ]
+unary_ops = [
+    np.negative,
+    np.abs,
+    np.sqrt,
+    np.exp,
+    np.log,
+    np.sin,
+    np.cos,
+    np.tan,
+    np.arcsin,
+    np.arccos,
+    np.arctan,
+    np.ceil,
+    np.floor
+]
 
-# binary_ops = [
-#     np.add,
-#     np.subtract,
-#     np.multiply,
-#     np.divide,
-#     np.power,
-#     np.maximum,
-#     np.minimum,
-#     np.mod
-# ]
+binary_ops = [
+    np.add,
+    np.subtract,
+    np.multiply,
+    np.divide,
+    np.power,
+    np.maximum,
+    np.minimum,
+    np.mod
+]
 
 # Tree.set_params(unary_ops, binary_ops, 3, 10)  
 # t = Tree(2)
 # t.print_tree()
 def main():
-    Tree.set_params(unary_ops, binary_ops, 3, 100,4, np.array([[1,2,3],[1,2,3],[1,2,3]]),np.array([1,2,3]))
+    Tree.set_params(unary_ops, binary_ops, 5, 100,5, np.array([[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6]]),np.array([1,2,3,4,5,6]))
     t=Tree("grow")
-  
-    t.print_tree()
+    # print(t.to_np_formula())
+    print(t.fitness)
+    # t.print_tree()
     t.add_drawing()
 if __name__ == "__main__":
     main()
