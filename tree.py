@@ -39,8 +39,8 @@ class Node:
         if self.node_type == NodeType.CONST:
             return str(self.value)
         if self.node_type == NodeType.VAR:
-            # return "x["+self.value[1:]+"]"
-            return self.value
+            return "x["+self.value[1:]+"]"
+            # return self.value
         if self.node_type == NodeType.U_OP:
             operand = self.right.to_np_formula() if self.left is None else self.left.to_np_formula()
             return f"np.{self.value.__name__}({operand})"
@@ -431,8 +431,10 @@ class Tree:
             return
         squared_errors = 0
         # print(x_data.shape[1])
+        formula=self.to_np_formula()
+        eval_formula=eval(f"lambda x: {formula}")
         for i in range(x_data.shape[1]):
-            y_pred = self.evaluate_tree(x_data[:, i])
+            y_pred = eval_formula(x_data[:, i])
             if np.isnan(y_pred) or np.isinf(y_pred):
                 self.fitness = np.inf
                 return
