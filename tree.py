@@ -39,6 +39,7 @@ class Node:
         if self.node_type == NodeType.CONST:
             return str(self.value)
         if self.node_type == NodeType.VAR:
+            # return "x["+self.value[1:]+"]"
             return self.value
         if self.node_type == NodeType.U_OP:
             operand = self.right.to_np_formula() if self.left is None else self.left.to_np_formula()
@@ -415,9 +416,16 @@ class Tree:
 
 
     #mean squared error
-    def compute_fitness(self,test=False):
-        x_data = Tree.x_test if test else Tree.x_train
-        y_data = Tree.y_test if test else Tree.y_train
+    def compute_fitness(self,test="train"):
+        if(test=="train"):
+            x_data = Tree.x_train
+            y_data = Tree.y_train
+        if(test=="test"):
+            x_data = Tree.x_test
+            y_data = Tree.y_test
+        if(test=="all"):
+            x_data = np.concatenate((Tree.x_train,Tree.x_test),axis=1)
+            y_data = np.concatenate((Tree.y_train,Tree.y_test))
         if x_data.shape[0] == 0 or x_data.shape[1] == 0:
             self.fitness = np.inf
             return
@@ -428,7 +436,7 @@ class Tree:
             if np.isnan(y_pred) or np.isinf(y_pred):
                 self.fitness = np.inf
                 return
-            squared_errors += (y_data[i] - y_pred) ** 2
+            squared_errors += np.square(y_data[i] - y_pred) 
         self.fitness = squared_errors / x_data.shape[1]
 
         return       
@@ -521,7 +529,7 @@ binary_ops = [
 # t = Tree(2)
 # t.print_tree()
 def main():
-    Tree.set_params(unary_ops, binary_ops, 5, 100,5, np.array([[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6]]),np.array([1,2,3,4,5,6]))
+    Tree.set_params(unary_ops, binary_ops, 1, 100,5, np.array([[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6]]),np.array([1,2,3,4,5,6]))
     t=Tree("grow")
     # print(t.to_np_formula())
     print(t.fitness)
