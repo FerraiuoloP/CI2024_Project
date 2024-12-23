@@ -164,46 +164,7 @@ class Tree:
         return build_tree(leaves, 0)
            
             
-
-
-        #TODO: delete if the new implementation works (it should)
-        # #create a tree with full method then prune randomly some branches that do not contain variables
-        # tree = Tree("full")
-        # # print("Albero full:")
-        # # tree.print_tree()
-        # # tree.add_drawing()
-        # nodes = tree.collect_nodes(tree.root)
-        # # nodes2=[node.clone() for node in nodes]
-        
-        # for node in nodes:
-        #     # print(node)
-        #     var_in_subtree = Tree.find_var_in_subtree(node)
-        #     if np.random.rand()>0.5  and node and node.node_type != NodeType.VAR and len(var_in_subtree)<2: #if the subtree has oly one variable we can prune it
-        #         if(np.random.rand()>0.5):
-        #             node.node_type = NodeType.U_OP
-        #             node.value = np.random.choice(Tree.unary_ops)
-        #             if(len(var_in_subtree))==1:
-        #                 node.left=Node(NodeType.VAR,value=var_in_subtree[0])
-        #             else:
-        #                 var_left= (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
-        #                 node.left=Node(NodeType.CONST,value=var_left)
-
-        #             node.right = None
-        #             node.left.left=None
-        #             node.left.right=None
-        #         else:
-        #             if(len(var_in_subtree))==1:
-        #                 node.node_type = NodeType.VAR
-        #                 node.value = var_in_subtree[0]
-                   
-        #             else:
-        #                 node.node_type = NodeType.CONST
-        #                 node.value = (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
-        #             node.left=None
-        #             node.right=None  
-                    
-
-                  
+                              
                 
         return tree.root
     
@@ -330,30 +291,7 @@ class Tree:
     def evaluate_tree(self, x):
         return Tree._evaluate_tree_recursive(self.root, x)
     
-    #OLD IMPLEMENTATION, can be deleted?
-    # @staticmethod
-    # def _evaluate_tree_recursive(node, x):
-    #     try:
-    #         with np.errstate(all='raise'):#to catch exceptions in numpy
-    #             if node.node_type == NodeType.VAR:
-    #                 number = int(node.value[1:])
-    #                 return x[number]
-    #             if node.node_type == NodeType.CONST:
-    #                 return node.value
-    #             if node.node_type == NodeType.U_OP:
-    #                 if node.right is None:
-    #                     return node.value(Tree._evaluate_tree_recursive(node.left, x))
-    #                 return node.value(Tree._evaluate_tree_recursive(node.right, x))
-    #             if node.node_type == NodeType.B_OP:
-    #                 # print(f"calculating {node.value.__name__} of {self._evaluate_tree_recursive(node.left, x)} and {self._evaluate_tree_recursive(node.right, x)}, the result is {node.value(self._evaluate_tree_recursive(node.left, x), self._evaluate_tree_recursive(node.right, x))}")
-                
-
-    #                 return node.value(
-    #                     Tree._evaluate_tree_recursive(node.left, x), 
-    #                     Tree._evaluate_tree_recursive(node.right, x)
-    #                 )
-    #     except (OverflowError, ZeroDivisionError, ValueError, RuntimeError, FloatingPointError):
-    #         return np.nan
+ 
     
     
     @staticmethod
@@ -388,34 +326,42 @@ class Tree:
         return result
         
 
-    #OLD IMPLEMENTATION, can be deleted?
-    # #mean squared error
-    # def compute_fitness(self,test=False):
-    #     x_data = Tree.x_test if test else Tree.x_train
-    #     y_data = Tree.y_test if test else Tree.y_train
-    #     try:
-    #         if x_data.shape[0] == 0:
-    #             self.fitness = np.inf
-    #             return
-    #         squared_errors = 0
-    #         # print(x_data.shape[1])
-    #         for i in range(x_data.shape[1]):
-    #             y_pred = self.evaluate_tree(x_data[:, i])
-    #             if np.isnan(y_pred) or np.isinf(y_pred):
-    #                 self.fitness = np.inf
-    #                 return
-    #             with np.errstate(all='raise'): #to raise exceptions in numpy
-    #                 squared_errors += (y_data[i] - y_pred) ** 2
-                
-    #                 self.fitness = squared_errors / x_data.shape[1]
 
-    #     except (OverflowError, ZeroDivisionError, ValueError, RuntimeError, FloatingPointError):  # Catch RuntimeWarning as RuntimeError
+
+    #NEW IMPLEMENTATION IS LIKE 25x FASTER, delete this if the other works properly
+    # #mean squared error
+    # def compute_fitness2(self,test="train"):
+    #     if(test=="train"):
+    #         x_data = Tree.x_train
+    #         y_data = Tree.y_train
+    #     if(test=="test"):
+    #         x_data = Tree.x_test
+    #         y_data = Tree.y_test
+    #     if(test=="all"):
+    #         x_data = np.concatenate((Tree.x_train,Tree.x_test),axis=1)
+    #         y_data = np.concatenate((Tree.y_train,Tree.y_test))
+    #     if x_data.shape[0] == 0 or x_data.shape[1] == 0:
     #         self.fitness = np.inf
     #         return
-        
+    #     squared_errors = 0
+    #     # print(x_data.shape[1])
+    #     # formula=self.to_np_formula()
+    #     # eval_formula=eval(f"lambda x: {formula}")
+
+    #     for i in range(x_data.shape[1]):
+    #         # y_pred = eval_formula(x_data[:, i])
+    #         y_pred = self.evaluate_tree(x_data[:, i])
+    #         if np.isnan(y_pred) or np.isinf(y_pred):
+    #             self.fitness = np.inf
+    #             return
+    #         squared_errors += np.square(y_data[i] - y_pred) 
+    #     self.fitness = squared_errors / x_data.shape[1]
+
+    #     return       
+    
 
 
-    #mean squared error
+
     def compute_fitness(self,test="train"):
         if(test=="train"):
             x_data = Tree.x_train
@@ -426,22 +372,25 @@ class Tree:
         if(test=="all"):
             x_data = np.concatenate((Tree.x_train,Tree.x_test),axis=1)
             y_data = np.concatenate((Tree.y_train,Tree.y_test))
-        if x_data.shape[0] == 0 or x_data.shape[1] == 0:
+
+        # Conver the formula in a pre-compiled lambda function
+        formula = self.to_np_formula()  
+        eval_formula = eval(f"lambda x: {formula}",{"np": np, "nan": np.nan, "inf": np.inf}) 
+
+        # Exploiting np broadcasting
+        y_pred = eval_formula(x_data)  
+
+
+        if np.any(np.isnan(y_pred)) or np.any(np.isinf(y_pred)):
             self.fitness = np.inf
             return
-        squared_errors = 0
-        # print(x_data.shape[1])
-        formula=self.to_np_formula()
-        eval_formula=eval(f"lambda x: {formula}")
-        for i in range(x_data.shape[1]):
-            y_pred = eval_formula(x_data[:, i])
-            if np.isnan(y_pred) or np.isinf(y_pred):
-                self.fitness = np.inf
-                return
-            squared_errors += np.square(y_data[i] - y_pred) 
-        self.fitness = squared_errors / x_data.shape[1]
 
-        return       
+        #Broadcasting is used to calculate the squared errors
+        squared_errors = np.square(y_data - y_pred)
+
+   
+        self.fitness = np.sum(squared_errors) / x_data.shape[1]
+
     
     def add_drawing(self):
         """Draws the tree using matplotlib."""
@@ -473,14 +422,15 @@ class Tree:
     def collapse_branch(node, current_depth=0,force_collapse=False):
         if node is None:
             return None
-        if current_depth >= Tree.max_depth or force_collapse: 
+        
+        if current_depth > Tree.max_depth or force_collapse: 
             vars_in_subtree = Tree.find_var_in_subtree(node)
-            if len(vars_in_subtree) == 0 and node.node_type != NodeType.CONST:
-                
-                # print("collapsed")
-                
-                ev = Tree._evaluate_tree_recursive(node, np.zeros(Tree.n_var))
 
+            if len(vars_in_subtree) == 0 and node.node_type != NodeType.CONST:
+                eval_formula = eval(f"lambda x: {node.to_np_formula()}")
+                # print("collapsed")
+                ev = eval_formula(np.zeros(Tree.n_var))
+                
                 node.node_type = NodeType.CONST
                 node.value = float(ev)  
                 node.left = None
@@ -531,9 +481,13 @@ binary_ops = [
 # t = Tree(2)
 # t.print_tree()
 def main():
-    Tree.set_params(unary_ops, binary_ops, 1, 100,5, np.array([[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6],[1,2,3,4,5,6]]),np.array([1,2,3,4,5,6]))
-    t=Tree("grow")
-    # print(t.to_np_formula())
+    np.seterr(all="ignore") #ignore np warnings, the output will be nan or inf and will be handled correctly in the code. (using np.errstate slows down the code)
+    x= [[1] for i in range(20)]
+    Tree.set_params(unary_ops, binary_ops, 20, 100,8, np.array(x),np.array([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]))
+    t=Tree("full",require_valid_tree=False)
+    print(t.to_np_formula())
+   
+    t.compute_fitness()
     print(t.fitness)
     # t.print_tree()
     t.add_drawing()
