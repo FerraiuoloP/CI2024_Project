@@ -3,7 +3,8 @@ from enum import Enum
 import numpy as np
 import matplotlib.pyplot as plt  
 from functools import lru_cache
-
+import cProfile 
+import random
 
 class NodeType(Enum):
     B_OP = 1
@@ -52,7 +53,7 @@ class Node:
 class Tree:
     _memo_cache = {}
     _cache_limit = 1000  # NOTE: lower this value if it slows down the program because the pc memory is full
-    _VAR_DUP_PROB = 0.15 # NOTE: keep this low for now since we need to implement properly the mutation and recombination of trees with duplicated variables
+    _VAR_DUP_PROB = 0.5 # NOTE: keep this low for now since we need to implement properly the mutation and recombination of trees with duplicated variables
     @staticmethod
     def set_params(unary_ops, binary_ops, n_var, max_const,max_depth, x_train, y_train, x_test=None, y_test=None):
         Tree.unary_ops = unary_ops
@@ -92,16 +93,17 @@ class Tree:
             leaves.append(Node(NodeType.VAR, value=var))
         while len(leaves) < 2 ** Tree.max_depth:
             if(np.random.rand()<Tree._VAR_DUP_PROB): #Duplicate a variable
-                leaves.append(Node(NodeType.VAR, value=np.random.choice(Tree.vars)))
+                value_idx=random.randint(0,Tree.n_var-1)
+                leaves.append(Node(NodeType.VAR, value=Tree.vars[value_idx]))
             else:
-                leaves.append(Node(NodeType.CONST, value=(-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())))
+                leaves.append(Node(NodeType.CONST, value=(-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * random.random())))
 
         #Then build the tree recursively
         def build_tree(leaves_to_place, current_depth):
             if current_depth == Tree.max_depth:
                 return leaves_to_place.pop(0)
-
-            node = Node(NodeType.B_OP, value=np.random.choice(Tree.binary_ops))
+            value_idx=random.randint(0,len(Tree.binary_ops)-1)
+            node = Node(NodeType.B_OP, value=Tree.binary_ops[value_idx])
             node.left = build_tree(leaves_to_place, current_depth + 1)
             node.right = build_tree(leaves_to_place, current_depth + 1)
             return node
@@ -120,9 +122,10 @@ class Tree:
             leaves.append(Node(NodeType.VAR, value=var))
         for _ in range(n_leaves - Tree.n_var):
             if(np.random.rand()<Tree._VAR_DUP_PROB): #Duplicate a variable
-                leaves.append(Node(NodeType.VAR, value=np.random.choice(Tree.vars)))
+                value_idx=random.randint(0,Tree.n_var-1)
+                leaves.append(Node(NodeType.VAR, value=Tree.vars[value_idx])) 
             else:
-                leaves.append(Node(NodeType.CONST, value=(-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())))
+                leaves.append(Node(NodeType.CONST, value=(-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * random.random())))
 
         #Then build the tree recursively
         def build_tree(leaves_to_place, current_depth):
@@ -139,7 +142,8 @@ class Tree:
             # OR np.random.rand()<PROB and the single subtree has enough space to place all the leaves
             #place a unary operator
             if(len(leaves_to_place)==1 or (np.random.rand()<0.3 and len(leaves_to_place)>0 and len(leaves_to_place)<=subtree_max_leaves) ): 
-                node=Node(NodeType.U_OP,value=np.random.choice(Tree.unary_ops))
+                value_idx=random.randint(0,len(Tree.unary_ops)-1)
+                node=Node(NodeType.U_OP,value=Tree.unary_ops[value_idx])
                 node.left=build_tree(leaves_to_place, current_depth + 1)
                 return node
             
@@ -155,7 +159,8 @@ class Tree:
                     place_on_left=np.random.randint(1,len(leaves_to_place)) #not using +1 even if high value is exclusive because otherwise we risk having right subtree with 0 leaves
                 place_on_right=len(leaves_to_place)-place_on_left
                 
-            node = Node(NodeType.B_OP, value=np.random.choice(Tree.binary_ops))
+            value_idx=random.randint(0,len(Tree.binary_ops)-1)
+            node = Node(NodeType.B_OP, value=Tree.binary_ops[value_idx])
             node.left = build_tree(leaves_to_place[0:place_on_left], current_depth + 1)
             node.right = build_tree(leaves_to_place[place_on_left:], current_depth + 1)
             return node
@@ -200,11 +205,14 @@ class Tree:
         node_to_replace.left = new_subtree.left
         node_to_replace.right = new_subtree.right
 
+
     def copy_tree(self):
         new_tree = Tree(empty=True)
         new_tree.root = self.root.clone()
         new_tree.fitness = self.fitness
         return new_tree
+
+
 
     def mutate_single_node(self):
         nodes = self.collect_nodes(self.root)
@@ -218,55 +226,198 @@ class Tree:
             node_to_mutate.value = np.random.choice(Tree.unary_ops)
     
   
-    #TODO:change so that it can find subtree with variables if it is duplicated somewhere else
+    #NOTE: the logic of this crossover is kinda convoluted because, while swapping the 2 subtrees, it assures that:
+    #1) After the crossover the resulting trees have at least 1 of each variable
+    #2) The resulting trees have a depth <= max_depth
     @staticmethod
     def crossover(tree1, tree2):
         new_tree1 = Tree(empty=True)
         new_tree2 = Tree(empty=True)
         new_tree1.root = tree1.root.clone()
         new_tree2.root = tree2.root.clone()
+        tree1_vars, tree1_nodes = new_tree1.collect_nodes(new_tree1.root)
+        tree2_vars, tree2_nodes = new_tree2.collect_nodes(new_tree2.root)
 
-        subtrees1 = new_tree1.find_subtree_without_var(new_tree1.root) #find subtrees without var so we can swap
-        subtrees2 = new_tree2.find_subtree_without_var(new_tree2.root)
+        #shuffle is important because we will iterate over the nodes and pick the first couple of subtrees that we find to be valid
+        np.random.shuffle(tree1_nodes)
+        np.random.shuffle(tree2_nodes)
 
-        if not subtrees1 or not subtrees2:
-            return None,None
+        #count the instances of each variable in the vars_list
+        def count_vars(vars_list):
+            var_count = {var: 0 for var in Tree.vars}
+            for var in vars_list:
+                var_count[var[0].value] += 1
+            return var_count
         
-       
-        subtree1 = np.random.choice(subtrees1)
-        subtree2 = np.random.choice(subtrees2)
+    
+        tree1_var_count = count_vars(tree1_vars)
+        tree2_var_count = count_vars(tree2_vars)
 
-        subtree1.node_type, subtree2.node_type = subtree2.node_type, subtree1.node_type
-        subtree1.value, subtree2.value = subtree2.value, subtree1.value
-        subtree1.left, subtree2.left = subtree2.left, subtree1.left
-        subtree1.right, subtree2.right = subtree2.right, subtree1.right
+
+        found_subtree1=None
+        found_subtree1=None
+        found_valid=False
+
+        #Iterate for each node of the first tree
+        while len(tree1_nodes) > 0 and found_valid==False:
+            subtree1_triple = tree1_nodes.pop(0)
+            subtree1_node,subtree1_depth,subtree1_len = subtree1_triple 
+
+            #We check that the subtree we are considering can be swapped: the variables in it are also present somewhere else in the same tree
+            subtree1_vars,_=tree1.collect_nodes(subtree1_node)
+            subtree1_var_count=count_vars(subtree1_vars)
+
+            #Difference between the 2 dictionaries: if the difference for one of the variables is <0 means that the variable only appears in the subtree, so we can't swap it
+            diff1 = {k: tree1_var_count[k] - subtree1_var_count[k] for k in Tree.vars}
+            #if each of the values in diff1 is >0 then we set found_subtree to True
+            valid=all(v > 0 for v in diff1.values())
+            if not valid:
+                continue #choose another subtree1_node
+
+            found_subtree1=subtree1_node
+
+            #NOTE: Check the collect_nodes method for definition of LEN and DEPTH
+            #General assumption: LEN_subtree1<=MAX_DEPTH-DEPTH_subtree2. This must hold for each subtree in the other tree
+            #The LEN_subtree1 must be <= MAX_DEPTH-DEPTH_subtree2 that is: if we add the subtree2 to subtree1, the resulting tree must have a depth <= MAX_DEPTH
+            #Then, we check also the other way around (after the 'end'): LEN_subtree2<=MAX_DEPTH-DEPTH_subtree1
+            subtree_to_consider_in_tree2=[i[0] for i in tree2_nodes if (subtree1_len <=Tree.max_depth -i[1]) and i[2]<=Tree.max_depth- subtree1_depth]
+
+            #Iterate for each suitable node of the second tree
+            for subtree2_node in subtree_to_consider_in_tree2: 
+
+                #We check that the subtree we are considering can be swapped: the variables in it are also present somewhere else in the same tree
+                subtree2_vars,_=tree2.collect_nodes(subtree2_node)
+                subtree2_var_count=count_vars(subtree2_vars)
+
+                #Difference between the 2 dictionaries: if the difference for one of the variables is <0 means that the variable only appears in the subtree, so we can't swap it
+                diff2 = {k: tree2_var_count[k] - subtree2_var_count[k] for k in Tree.vars}
+
+                #if each of the values in diff2 is >0 then we set found_subtree to True
+                valid=all(v > 0 for v in diff2.values())
+                if valid:
+                    found_valid=True
+                    found_subtree2=subtree2_node 
+                    break #We exit the loop because we found a valid subtree1_node, subtree2_node 
+            
+        if not found_valid:
+            return None,None
+          
+        found_subtree1.node_type, found_subtree2.node_type = found_subtree2.node_type, found_subtree1.node_type
+        found_subtree1.value, found_subtree2.value = found_subtree2.value, found_subtree1.value
+        found_subtree1.left, found_subtree2.left = found_subtree2.left, found_subtree1.left
+        found_subtree1.right, found_subtree2.right = found_subtree2.right, found_subtree1.right
 
         return new_tree1, new_tree2
 
-    def find_subtree_without_var(self, node):
-        if node is None:
-            return []
-        subtrees = []
-        if node.node_type != NodeType.VAR and not Tree.find_var_in_subtree(node):
-            subtrees.append(node)
-        subtrees += self.find_subtree_without_var(node.left)
-        subtrees += self.find_subtree_without_var(node.right)
-        return subtrees
 
-    #returns a tuple of two lists, the first one contains the variables in the subtree, the second one contains the other nodes
-    def collect_nodes(self, node):
+
+
+#    @staticmethod
+#     def crossover(tree1, tree2):
+#         new_tree1 = Tree(empty=True)
+#         new_tree2 = Tree(empty=True)
+#         new_tree1.root = tree1.root.clone()
+#         new_tree2.root = tree2.root.clone()
+#         tree1_vars, tree1_nodes = new_tree1.collect_nodes(new_tree1.root)
+#         tree2_vars, tree2_nodes = new_tree2.collect_nodes(new_tree2.root)
+
+#         #shuffle
+#         np.random.shuffle(tree1_nodes)
+#         np.random.shuffle(tree2_nodes)
+
+#         def count_vars(vars_list):
+#             #count the instances of each variable in the trees
+#             var_count = {var: 0 for var in Tree.vars}
+#             for var in vars_list:
+#                 var_count[var.value] += 1
+#             return var_count
+        
+    
+#         tree1_var_count = count_vars(tree1_vars)
+     
+        
+#         found_subtree1=False
+#         while len(tree1_nodes)>0 and not found_subtree1:
+#             subtree1=tree1_nodes.pop(0)
+#             subtree1_vars,_=tree1.collect_nodes(subtree1)
+#             subtree1_var_count=count_vars(subtree1_vars)
+#             #difference between the 2 dictionaries
+#             diff1 = {k: tree1_var_count[k] - subtree1_var_count[k] for k in Tree.vars}
+#             #if each of the values in diff1 is >0 then we set found_subtree to True
+#             found_subtree1 = all(v > 0 for v in diff1.values())
+            
+
+
+#         if(not found_subtree1): 
+#             return None,None
+
+#         tree2_var_count = count_vars(tree2_vars)
+
+#         found_subtree2=False
+#         while len(tree2_nodes)>0 and not found_subtree2:
+#             subtree2=tree2_nodes.pop(0)
+#             subtree2_vars,_=tree2.collect_nodes(subtree2)
+#             subtree2_var_count=count_vars(subtree2_vars)
+#             #difference between the 2 dictionaries
+#             diff2 = {k: tree2_var_count[k] - subtree2_var_count[k] for k in Tree.vars}
+#             #if each of the values in diff2 is >0 then we set found_subtree to True
+#             found_subtree2 = all(v > 0 for v in diff2.values())
+
+
+
+#         if(not found_subtree2):
+#             return None,None
+
+#         subtree1.node_type, subtree2.node_type = subtree2.node_type, subtree1.node_type
+#         subtree1.value, subtree2.value = subtree2.value, subtree1.value
+#         subtree1.left, subtree2.left = subtree2.left, subtree1.left
+#         subtree1.right, subtree2.right = subtree2.right, subtree1.right
+
+#         return new_tree1, new_tree2
+
+    # def find_subtree_without_var(self, node):
+    #     if node is None:
+    #         return []
+    #     subtrees = []
+    #     if node.node_type != NodeType.VAR and not Tree.find_var_in_subtree(node):
+    #         subtrees.append(node)
+    #     subtrees += self.find_subtree_without_var(node.left)
+    #     subtrees += self.find_subtree_without_var(node.right)
+    #     return subtrees
+
+
+    """
+    @return: Two lists of tuples. The first list contains the variables in the tree, the second list contains the other nodes.
+    Each tuple has the following structure: (node, depth, len).
+    Node: the node itself
+    Depth: the depth of the node in the tree (so root has depth 0, its children have depth 1, etc.)
+    Len: the max length of the subtree of the current node (so a leaf has depth 0, its parent has depth 1, etc.)
+
+    """
+    def collect_nodes(self, node,depth=0):
         if node is None:
             return []
-        left_variables,left_others=self.collect_nodes(node.left)
-        right_variables,right_others=self.collect_nodes(node.right)
+        if(node.node_type==NodeType.VAR):
+            return [(node,depth,0)],[]
+        if(node.node_type==NodeType.CONST):
+            return [],[(node,depth,0)]
+        
+        if(node.left is not None):
+            left_variables,left_others=self.collect_nodes(node.left,depth+1)
+        else:
+            left_variables,left_others=[],[]
+        if(node.right is not None): 
+            right_variables,right_others=self.collect_nodes(node.right,depth+1)
+        else:
+            right_variables,right_others=[],[]
+
+        lenghts=[i[2] for i in left_variables+right_variables+left_others+right_others]
+        max_len=max(lenghts)
 
         variables=left_variables+right_variables
         others=left_others+right_others
 
-        if node.node_type == NodeType.VAR:
-            return variables+[node],others
-        else:
-            return variables,others+[node]
+        return variables,others+[(node,depth,max_len+1)]
     
     @staticmethod
     def find_var_in_subtree(node):
@@ -443,7 +594,9 @@ class Tree:
 
 
     def __lt__(self, other):
-        return self.fitness > other.fitness
+        return self.fitness < other.fitness
+    def __eq__(self, other):
+        return self.fitness == other.fitness
     
 
 
@@ -481,17 +634,72 @@ binary_ops = [
 # t = Tree(2)
 # t.print_tree()
 def main():
+    np.random.seed(4)
     np.seterr(all="ignore") #ignore np warnings, the output will be nan or inf and will be handled correctly in the code. (using np.errstate slows down the code)
     x= [[1] for i in range(20)]
-    Tree.set_params(unary_ops, binary_ops, 20, 100,8, np.array(x),np.array([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]))
+    Tree.set_params(unary_ops, binary_ops, 3, 100,2, np.array(x),np.array([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]))
     t=Tree("full",require_valid_tree=False)
-    print(t.to_np_formula())
+    t.add_drawing()
+    Tree.set_params(unary_ops, binary_ops, 3, 100,6, np.array(x),np.array([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]))
+    # xd,xd2=t.collect_nodes(t.root)
+    # xd=[f"[{str(i[0])},{i[1]},{i[2]}]"  for i in xd]
+    # xd2=[f"[{str(i[0])},{i[1]},{i[2]}]" for i in xd2]
+    # print(xd)
+    # print(xd2)
+
+  
+    t1=Tree("full",require_valid_tree=False)
+    t1.add_drawing()
+
+
+    t2,t3=Tree.crossover(t,t1)
+    t2.add_drawing()
+    t3.add_drawing()
+
+
+    # print(t.to_np_formula())
    
     t.compute_fitness()
     print(t.fitness)
     # t.print_tree()
-    t.add_drawing()
+    
+
+def maxDepth(s):
+
+	count = 0
+	st = []
+
+	for i in range(len(s)):
+		if (s[i] == '('):
+			st.append(i) # pushing the bracket in the stack
+		elif (s[i] == ')'):
+			if (count < len(st)):
+				count = len(st)
+			# keeping track of the parenthesis and storing
+			# it before removing it when it gets balanced
+			st.pop()
+		
+	return count
+
+def count_vars2(vars_list):
+            #count the instances of each variable in the trees
+            var_count = {var: 0 for var in Tree.vars}
+            for var in vars_list:
+                var_count[var.value] += 1
+            return var_count
+
+
 if __name__ == "__main__":
+    # s = "np.power(np.add(np.subtract(np.multiply(np.remainder(np.subtract(np.maximum(-30.84045049228496, -74.14319824641566), np.add(-67.51952574430581, 66.2449211244043)), np.power(np.power(-92.81856749082138, -4.158849753764187), np.maximum(x[8], -49.65853756333259))), np.subtract(np.minimum(np.power(91.93377534586068, -85.82961141527667), np.minimum(x[10], -46.572100301288486)), np.remainder(np.add(94.66591430218702, 36.2219989815153), np.maximum(21.305047398470194, x[9])))), np.maximum(np.remainder(np.power(np.divide(-11.080554883890969, 22.148790025225807), np.divide(-86.55918974862678, 44.81232498297484)), np.multiply(np.subtract(x[5], 78.1130339608423), np.multiply(16.89709916522277, 98.04247961127152))), np.divide(np.multiply(np.multiply(84.5757783109728, 42.47768126071122), np.add(x[4], -32.40192770355243)), np.divide(np.multiply(-84.2330636334321, x[16]), np.remainder(85.43081758653614, 86.40686436605807))))), np.divide(np.power(np.remainder(np.multiply(np.power(x[10], x[16]), np.minimum(-89.8044741630617, -27.508293200009376)), np.add(np.maximum(-30.49762415792597, 34.692249370529396), np.power(5.441707006218309, 62.46846558895308))), np.divide(np.multiply(np.multiply(x[15], 71.90362718674143), np.multiply(75.19810211056495, -97.27396600081799)), np.power(np.subtract(-86.48039060781264, x[18]), np.subtract(-43.71704848649915, -35.699519013288025)))), np.divide(np.subtract(np.subtract(np.minimum(x[4], -41.46282691605509), np.remainder(-35.28482468595506, x[3])), np.power(np.minimum(-1.8416430576277492, 11.083557711230213), np.remainder(x[11], x[2]))), np.power(np.add(np.subtract(x[12], 82.10842094348274), np.minimum(-21.415362849911347, -83.06962672811605)), np.divide(np.power(-79.09034709261033, 69.91321000226674), np.remainder(x[19], x[2])))))), np.multiply(np.add(np.maximum(np.power(np.power(np.add(-48.73837771366749, -80.88125396873366), np.subtract(-70.42262001738715, 84.30152970807234)), np.remainder(np.multiply(8.060092266617374, -10.986099909121066), np.subtract(-58.65037257121026, -29.660794426263408))), np.power(np.subtract(np.subtract(-54.15714913929077, -32.40256410842473), np.remainder(-72.43664692976309, 11.715719016366052)), np.maximum(np.add(18.636317718992018, x[0]), np.power(-73.40707841020446, 58.96530547436771)))), np.multiply(np.maximum(np.power(np.multiply(x[1], 61.341905198702364), np.minimum(-24.61150459408792, 26.565191995543884)), np.remainder(np.power(-37.255100220120156, 3.7947546437911512), np.minimum(26.46741841119362, 9.366732257655897))), np.divide(np.add(np.remainder(49.28663498099192, -32.71608497711573), np.remainder(5.633993847939436, 21.704940596722807)), np.multiply(np.power(-22.816756961821213, -63.669747219237635), np.maximum(2.878546524340564, 2.4234572367660974))))), np.divide(np.maximum(np.remainder(np.remainder(np.subtract(x[19], x[13]), np.power(x[6], -6.086815827142743)), np.subtract(np.power(47.22223380607039, -9.232581883520524), np.add(x[14], -7.9648013320643685))), np.maximum(np.multiply(np.remainder(-45.34827852837107, -75.65482429634606), np.multiply(x[6], 34.71514120997742)), np.multiply(np.subtract(-42.08733847435677, 90.97000701771921), np.minimum(x[7], -59.012398693044176)))), np.remainder(np.divide(np.power(np.multiply(29.46894244988215, -61.37722772136141), np.maximum(x[15], -85.00986964239314)), np.maximum(np.divide(x[1], -15.201248555199356), np.subtract(67.38169786073428, x[5]))), np.divide(np.add(np.multiply(43.82476717689315, 15.764198377982169), np.divide(25.87263873147316, x[17])), np.maximum(np.minimum(-11.85424889329208, 88.97968466219476), np.maximum(12.660283870728549, -82.3832836904882)))))))"
+    # cProfile.run("maxDepth(s)")
     main()
+
+
+
+
+
+# Driver program
+
+
    
 # print(t.evaluate_tree([1, 2, 3]))
