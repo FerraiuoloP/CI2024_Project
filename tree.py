@@ -54,6 +54,7 @@ class Tree:
     # _memo_cache = {}
     # _cache_limit = 1000  
     _VAR_DUP_PROB = 0.15 # NOTE: keep this low for now since we need to implement properly the mutation and recombination of trees with duplicated variables
+
     @staticmethod
     def set_params(unary_ops, binary_ops, n_var, max_const,max_depth, x_train, y_train, x_test=None, y_test=None):
         Tree.unary_ops = unary_ops
@@ -68,10 +69,10 @@ class Tree:
         Tree.max_depth = max_depth
 
 
-
-    def __init__(self, method="full",require_valid_tree=True,empty=False):
-        #Valid tree means a tree that has a computable fitness (no division by zero, no overflow, etc.)
+    def __init__(self, method="full", require_valid_tree=True, empty=False):
+        # Valid tree means a tree that has a computable fitness (no division by zero, no overflow, etc.)
         
+        self.age = 0    # NOTE: it's just a test for select_parents_fitness_age
         self.fitness = np.inf
         
         self.root = None
@@ -220,6 +221,8 @@ class Tree:
 
 
     def mutate_subtree(self):
+        self.age += 1
+
         variables_tree_tripe,other_nodes_triple = self.collect_nodes(self.root)
         variables_tree=Tree.count_vars(variables_tree_tripe)
 
@@ -263,6 +266,8 @@ class Tree:
 
 
     def mutate_single_node(self):
+        self.age += 1
+
         _,nodes_triple = self.collect_nodes(self.root)
         index = np.random.randint(0, len(nodes_triple))
         node_to_mutate = nodes_triple[index][0]
@@ -281,6 +286,7 @@ class Tree:
     #2) The resulting trees have a depth <= max_depth
     @staticmethod
     def crossover(tree1, tree2):
+        # TODO: increment tree age in crossover for select_parents_fitness_age (?)
         new_tree1 = Tree(empty=True)
         new_tree2 = Tree(empty=True)
         new_tree1.root = tree1.root.clone()
@@ -605,8 +611,51 @@ class Tree:
         plt.axis('off')
         draw_node(self.root, 0, 0, 20, 2)
         plt.show()
-    
 
+
+    # def add_drawing(self):
+    #     """ 
+    #     Draws the tree using matplotlib.
+    #     """
+        
+    #     def draw_node(node, x, y, dx, dy, level=0):
+    #         if node is not None:
+    #             color = 'red' if node.node_type == NodeType.VAR else 'lightblue'  # VAR nodes are red
+    #             label = str(node)
+                
+    #             # Dynamic size (smaller font for deeper levels)
+    #             fontsize = max(10, 20 - level) 
+                
+    #             # Draw the node
+    #             plt.text(x, y, label, ha='center', va='center', fontsize=fontsize,
+    #                     bbox=dict(boxstyle='round,pad=0.3', edgecolor='black', facecolor=color))
+                
+    #             # Recursively draw the left and right children if they exist
+    #             if node.left is not None:
+    #                 plt.plot([x, x - dx], [y - dy / 2, y - dy], color='black', lw=2)
+    #                 draw_node(node.left, x - dx, y - dy, dx / 2, dy, level + 1)
+                
+    #             if node.right is not None:
+    #                 plt.plot([x, x + dx], [y - dy / 2, y - dy], color='black', lw=2)
+    #                 draw_node(node.right, x + dx, y - dy, dx / 2, dy, level + 1)
+
+    #     # Setup figure size and remove axis
+    #     plt.figure(figsize=(12, 8))
+    #     plt.axis('off')
+
+    #     # Calculate dynamic dx and dy based on tree size
+    #     tree_height = self.max_depth if hasattr(self, 'max_depth') else 3  # default max_depth is 3 if not specified
+    #     dx = max(20, 40 / tree_height)  # Adjust horizontal distance based on tree depth
+    #     dy = max(2, 4 / tree_height)    # Adjust vertical distance based on tree depth
+
+    #     # Start the recursive drawing process
+    #     draw_node(self.root, 0, 0, dx, dy)
+
+    #     # Optional: Adjust the padding to prevent clipping of the nodes
+    #     plt.tight_layout(pad=2)
+    #     plt.show()
+
+    
     def to_np_formula(self):
         return self.root.to_np_formula()
     
