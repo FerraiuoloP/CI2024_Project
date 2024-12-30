@@ -56,16 +56,16 @@ class Tree:
     _VAR_DUP_PROB = 0.15 # NOTE: keep this low for now since we need to implement properly the mutation and recombination of trees with duplicated variables
 
     @staticmethod
-    def set_params(unary_ops, binary_ops, n_var, max_const,max_depth, x_train, y_train, x_test=None, y_test=None):
+    def set_params(unary_ops, binary_ops, n_var, max_const,max_depth, x_train_norm, y_train_norm, x_test_norm=None, y_test_norm=None):
         Tree.unary_ops = unary_ops
         Tree.binary_ops = binary_ops
         Tree.n_var = n_var
         Tree.vars = [f'x{i}' for i in range(Tree.n_var)]
         Tree.max_const = max_const
-        Tree.x_train = x_train
-        Tree.y_train = y_train
-        Tree.x_test = x_test
-        Tree.y_test = y_test
+        Tree.x_train = x_train_norm
+        Tree.y_train = y_train_norm
+        Tree.x_test = x_test_norm
+        Tree.y_test = y_test_norm
         Tree.max_depth = max_depth
 
 
