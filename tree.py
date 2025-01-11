@@ -269,6 +269,8 @@ class Tree:
         self.age += 1
 
         _,nodes_triple = self.collect_nodes(self.root)
+        if(len(nodes_triple)==0): #if there are no nodes to mutate but the tree is made only of a variable
+            return
         index = np.random.randint(0, len(nodes_triple))
         node_to_mutate = nodes_triple[index][0]
         if node_to_mutate.node_type == NodeType.CONST:
@@ -564,7 +566,7 @@ class Tree:
 
 
 
-    def compute_fitness(self,test="train"):
+    def compute_fitness(self,test="train",fitness_type="mse"):
         if(test=="train"):
             x_data = Tree.x_train
             y_data = Tree.y_train
@@ -587,11 +589,19 @@ class Tree:
             self.fitness = np.inf
             return
 
-        #Broadcasting is used to calculate the squared errors
-        squared_errors = np.square(y_data - y_pred)
-
-   
-        self.fitness = np.sum(squared_errors) / x_data.shape[1]
+        if fitness_type == "mse": 
+            #Broadcasting is used to calculate the squared errors
+            squared_errors = np.square(y_data - y_pred)
+            self.fitness = np.sum(squared_errors) / x_data.shape[1]
+        elif fitness_type == "r2":
+            # Calculate the R2 score
+            ss_res = np.sum(np.square(y_data - y_pred))
+            ss_tot = np.sum(np.square(y_data - np.mean(y_data)))
+            self.fitness = 1 - (ss_res / ss_tot)
+        elif fitness_type == "mae":
+            self.fitness = np.mean(np.abs(y_data - y_pred))
+        elif fitness_type == "rmse":
+            self.fitness = np.sqrt(np.mean(np.square(y_data - y_pred)))
 
     
     def add_drawing(self):
