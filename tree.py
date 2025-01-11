@@ -53,7 +53,7 @@ class Node:
 class Tree:
     # _memo_cache = {}
     # _cache_limit = 1000  
-    _VAR_DUP_PROB = 0.15 # NOTE: keep this low for now since we need to implement properly the mutation and recombination of trees with duplicated variables
+    _VAR_DUP_PROB = 0.15
 
     @staticmethod
     def set_params(unary_ops, binary_ops, n_var, max_const,max_depth, x_train, y_train, x_test=None, y_test=None):
@@ -269,6 +269,8 @@ class Tree:
         self.age += 1
 
         _,nodes_triple = self.collect_nodes(self.root)
+        if(len(nodes_triple)==0): #if there are no nodes to mutate but the tree is made only of a variable
+            return
         index = np.random.randint(0, len(nodes_triple))
         node_to_mutate = nodes_triple[index][0]
         if node_to_mutate.node_type == NodeType.CONST:
