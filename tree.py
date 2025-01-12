@@ -67,6 +67,7 @@ class Tree:
         Tree.x_test = x_test
         Tree.y_test = y_test
         Tree.max_depth = max_depth
+        Tree.max_depth_gen=6
 
 
     def __init__(self, method="full", require_valid_tree=True, empty=False):
@@ -92,7 +93,7 @@ class Tree:
         #First create the leaves of the tree. Every variable should be placed in the tree at least once!
         for var in  Tree.vars:
             leaves.append(Node(NodeType.VAR, value=var))
-        while len(leaves) < 2 ** Tree.max_depth:
+        while len(leaves) < 2 ** Tree.max_depth_gen:
             if(np.random.rand()<Tree._VAR_DUP_PROB): #Duplicate a variable
                 value_idx=random.randint(0,Tree.n_var-1)
                 leaves.append(Node(NodeType.VAR, value=Tree.vars[value_idx]))
@@ -101,7 +102,7 @@ class Tree:
 
         #Then build the tree recursively
         def build_tree(leaves_to_place, current_depth):
-            if current_depth == Tree.max_depth:
+            if current_depth == Tree.max_depth_gen:
                 return leaves_to_place.pop(0)
             value_idx=random.randint(0,len(Tree.binary_ops)-1)
             node = Node(NodeType.B_OP, value=Tree.binary_ops[value_idx])
@@ -118,7 +119,7 @@ class Tree:
 
         if max_depth is None:
             #Pick a number of leaves between Tree.n_var and 2^max_depth
-            n_leaves = np.random.randint(Tree.n_var, 2 ** Tree.max_depth +1)#+1 cause high val is exclusive
+            n_leaves = np.random.randint(Tree.n_var, 2 ** Tree.max_depth_gen +1)#+1 cause high val is exclusive
         else:
             if must_include_vars is None or len(must_include_vars) == 0:
                 n_leaves = np.random.randint(1, 2 ** max_depth +1)
@@ -146,7 +147,7 @@ class Tree:
         #Then build the tree recursively
         def build_tree(leaves_to_place, current_depth,max_depth=None):
             if max_depth is None:
-                max_depth=Tree.max_depth
+                max_depth=Tree.max_depth_gen
 
             if current_depth == max_depth:#enter here only if we reached the max depth, place the last leaf
                 return leaves_to_place.pop(0)
@@ -265,22 +266,25 @@ class Tree:
 
 
 
-    def mutate_single_node(self):
+    def mutate_single_node(self, num_mutations=1):
         self.age += 1
 
         _,nodes_triple = self.collect_nodes(self.root)
         if(len(nodes_triple)==0): #if there are no nodes to mutate but the tree is made only of a variable
             return
-        index = np.random.randint(0, len(nodes_triple))
-        node_to_mutate = nodes_triple[index][0]
-        if node_to_mutate.node_type == NodeType.CONST:
-            node_to_mutate.value = (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
-        elif node_to_mutate.node_type == NodeType.B_OP:
-            op_idx=random.randint(0,len(Tree.binary_ops)-1)
-            node_to_mutate.value = Tree.binary_ops[op_idx]
-        elif node_to_mutate.node_type == NodeType.U_OP:
-            op_idx=random.randint(0,len(Tree.unary_ops)-1)
-            node_to_mutate.value = Tree.unary_ops[op_idx]
+        if(num_mutations>len(nodes_triple)):
+            num_mutations=len(nodes_triple)
+        for _ in range(num_mutations):
+            index = np.random.randint(0, len(nodes_triple))
+            node_to_mutate = nodes_triple[index][0]
+            if node_to_mutate.node_type == NodeType.CONST:
+                node_to_mutate.value = (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
+            elif node_to_mutate.node_type == NodeType.B_OP:
+                op_idx=random.randint(0,len(Tree.binary_ops)-1)
+                node_to_mutate.value = Tree.binary_ops[op_idx]
+            elif node_to_mutate.node_type == NodeType.U_OP:
+                op_idx=random.randint(0,len(Tree.unary_ops)-1)
+                node_to_mutate.value = Tree.unary_ops[op_idx]
     
   
     #NOTE: the logic of this crossover is kinda convoluted because, while swapping the 2 subtrees, it assures that:
@@ -614,7 +618,28 @@ class Tree:
         draw_node(self.root, 0, 0, 20, 2)
         plt.show()
 
-
+    def create_tree_from_formula(formula):
+        tree = Tree(empty=True)
+        tree.root = Tree._create_tree_from_formula_recursive(formula)
+        return tree
+    
+    @staticmethod
+    def _create_tree_from_formula_recursive(formula):
+        if formula is None:
+            return None
+        if isinstance(formula, str):
+            if formula in Tree.vars:
+                return Node(NodeType.VAR, value=formula)
+            return Node(NodeType.CONST, value=float(formula))
+        if isinstance(formula, np.ufunc):
+            return Node(NodeType.U_OP, value=formula)
+        if isinstance(formula, tuple):
+            node = Node(NodeType.B_OP, value=formula[0])
+            node.left = Tree._create_tree_from_formula_recursive(formula[1])
+            node.right = Tree._create_tree_from_formula_recursive(formula[2])
+            return node
+        return None
+    
     # def add_drawing(self):
     #     """ 
     #     Draws the tree using matplotlib.
