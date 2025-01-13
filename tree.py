@@ -55,8 +55,9 @@ class Tree:
     # _cache_limit = 1000  
     _VAR_DUP_PROB = 0.15 # NOTE: keep this low for now since we need to implement properly the mutation and recombination of trees with duplicated variables
 
+
     @staticmethod
-    def set_params(unary_ops, binary_ops, n_var, max_const,max_depth, x_train_norm, y_train_norm, x_test_norm=None, y_test_norm=None):
+    def set_params(unary_ops, binary_ops, n_var, max_const, x_train_norm, y_train_norm, x_test_norm=None, y_test_norm=None):
         Tree.unary_ops = unary_ops
         Tree.binary_ops = binary_ops
         Tree.n_var = n_var
@@ -66,33 +67,35 @@ class Tree:
         Tree.y_train = y_train_norm
         Tree.x_test = x_test_norm
         Tree.y_test = y_test_norm
-        Tree.max_depth = max_depth
+     
 
 
-    def __init__(self, method="full", require_valid_tree=True, empty=False):
+
+    def __init__(self, method="full", require_valid_tree=True, empty=False, max_depth=10,spawn_depth=5):
         # Valid tree means a tree that has a computable fitness (no division by zero, no overflow, etc.)
-        
+        # print(f"--Creating tree with max_depth:{max_depth} and spawn_depth:{spawn_depth}")
+        self.max_depth = max_depth
+        self.spawn_depth = spawn_depth
         self.age = 0    # NOTE: it's just a test for select_parents_fitness_age
         self.fitness = np.inf
-        
         self.root = None
         while not empty and self.fitness == np.inf:
             if method == "full":
-                self.root = self.create_random_tree_full_method()
+                self.root = self.populate_tree_full_method()
             elif method == "grow":
-                self.root = self.create_random_tree_grow_method()
+                self.root = self.populate_tree_grow_method()
             self.compute_fitness()
             if not require_valid_tree:
                 break
             
     
-    @staticmethod
-    def create_random_tree_full_method():
+    
+    def populate_tree_full_method(self):
         leaves = []
         #First create the leaves of the tree. Every variable should be placed in the tree at least once!
         for var in  Tree.vars:
             leaves.append(Node(NodeType.VAR, value=var))
-        while len(leaves) < 2 ** Tree.max_depth:
+        while len(leaves) < 2 ** self.spawn_depth:
             if(np.random.rand()<Tree._VAR_DUP_PROB): #Duplicate a variable
                 value_idx=random.randint(0,Tree.n_var-1)
                 leaves.append(Node(NodeType.VAR, value=Tree.vars[value_idx]))
@@ -101,7 +104,7 @@ class Tree:
 
         #Then build the tree recursively
         def build_tree(leaves_to_place, current_depth):
-            if current_depth == Tree.max_depth:
+            if current_depth == self.spawn_depth:
                 return leaves_to_place.pop(0)
             value_idx=random.randint(0,len(Tree.binary_ops)-1)
             node = Node(NodeType.B_OP, value=Tree.binary_ops[value_idx])
@@ -112,13 +115,13 @@ class Tree:
         np.random.shuffle(leaves)
         return build_tree(leaves, 0)
 
-    @staticmethod
-    def create_random_tree_grow_method(max_depth=None,must_include_vars=None): 
+  
+    def populate_tree_grow_method(self,max_depth=None,must_include_vars=None): 
         #max_depth and must_include_vars are set if creating a subtree: a tree wtih custom depth and do not need to include all the variables
-
+        # print(f"Creating tree with max_depth:{self.max_depth} and spawn_depth:{self.spawn_depth}")
         if max_depth is None:
             #Pick a number of leaves between Tree.n_var and 2^max_depth
-            n_leaves = np.random.randint(Tree.n_var, 2 ** Tree.max_depth +1)#+1 cause high val is exclusive
+            n_leaves = np.random.randint(Tree.n_var, 2 ** self.spawn_depth +1)#+1 cause high val is exclusive
         else:
             if must_include_vars is None or len(must_include_vars) == 0:
                 n_leaves = np.random.randint(1, 2 ** max_depth +1)
@@ -146,7 +149,7 @@ class Tree:
         #Then build the tree recursively
         def build_tree(leaves_to_place, current_depth,max_depth=None):
             if max_depth is None:
-                max_depth=Tree.max_depth
+                max_depth=self.spawn_depth
 
             if current_depth == max_depth:#enter here only if we reached the max depth, place the last leaf
                 return leaves_to_place.pop(0)
@@ -227,7 +230,7 @@ class Tree:
         variables_tree=Tree.count_vars(variables_tree_tripe)
 
         #choose a node that is not at the max depth
-        valid_nodes=[i for i in variables_tree_tripe+other_nodes_triple if i[1]<Tree.max_depth]
+        valid_nodes=[i for i in variables_tree_tripe+other_nodes_triple if i[1]<self.max_depth]
         pick_idx=random.randint(0,len(valid_nodes)-1)
         picked_node_triple=valid_nodes[pick_idx]
         picked_node,picked_depth,_ = picked_node_triple
@@ -246,11 +249,11 @@ class Tree:
         # next(res)
     
  
-        max_possible_depth = Tree.max_depth - picked_depth
+        max_possible_depth = self.max_depth - picked_depth
         # print("Max possible depth: ",max_possible_depth)
  
         
-        new_subtree = Tree.create_random_tree_grow_method(max_possible_depth,must_include_vars=must_include_vars)
+        new_subtree = self.populate_tree_grow_method(max_possible_depth,must_include_vars=must_include_vars)
         if new_subtree is not None:
             picked_node.node_type = new_subtree.node_type
             picked_node.value = new_subtree.value
@@ -258,39 +261,45 @@ class Tree:
             picked_node.right = new_subtree.right
 
     def copy_tree(self):
-        new_tree = Tree(empty=True)
+        new_tree = Tree(empty=True,max_depth=self.max_depth,spawn_depth=self.spawn_depth)
         new_tree.root = self.root.clone()
         new_tree.fitness = self.fitness
         return new_tree
 
 
 
-    def mutate_single_node(self):
+    def mutate_single_node(self, num_mutations=1):
         self.age += 1
 
         _,nodes_triple = self.collect_nodes(self.root)
-        index = np.random.randint(0, len(nodes_triple))
-        node_to_mutate = nodes_triple[index][0]
-        if node_to_mutate.node_type == NodeType.CONST:
-            node_to_mutate.value = (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
-        elif node_to_mutate.node_type == NodeType.B_OP:
-            op_idx=random.randint(0,len(Tree.binary_ops)-1)
-            node_to_mutate.value = Tree.binary_ops[op_idx]
-        elif node_to_mutate.node_type == NodeType.U_OP:
-            op_idx=random.randint(0,len(Tree.unary_ops)-1)
-            node_to_mutate.value = Tree.unary_ops[op_idx]
+        if(len(nodes_triple)==0): #if there are no nodes to mutate but the tree is made only of a variable
+            return
+        if(num_mutations>len(nodes_triple)):
+            num_mutations=len(nodes_triple)
+        for _ in range(num_mutations):
+            index = np.random.randint(0, len(nodes_triple))
+            node_to_mutate = nodes_triple[index][0]
+            if node_to_mutate.node_type == NodeType.CONST:
+                node_to_mutate.value = (-Tree.max_const + (Tree.max_const - (-Tree.max_const)) * np.random.random())
+            elif node_to_mutate.node_type == NodeType.B_OP:
+                op_idx=random.randint(0,len(Tree.binary_ops)-1)
+                node_to_mutate.value = Tree.binary_ops[op_idx]
+            elif node_to_mutate.node_type == NodeType.U_OP:
+                op_idx=random.randint(0,len(Tree.unary_ops)-1)
+                node_to_mutate.value = Tree.unary_ops[op_idx]
     
   
     #NOTE: the logic of this crossover is kinda convoluted because, while swapping the 2 subtrees, it assures that:
     #1) After the crossover the resulting trees have at least 1 of each variable
     #2) The resulting trees have a depth <= max_depth
-    @staticmethod
-    def crossover(tree1, tree2):
+
+    def crossover(self, tree2):
         # TODO: increment tree age in crossover for select_parents_fitness_age (?)
-        new_tree1 = Tree(empty=True)
-        new_tree2 = Tree(empty=True)
-        new_tree1.root = tree1.root.clone()
+        new_tree1 = Tree(empty=True,max_depth=self.max_depth,spawn_depth=self.spawn_depth)
+        new_tree2 = Tree(empty=True,max_depth=tree2.max_depth,spawn_depth=tree2.spawn_depth)
+        new_tree1.root = self.root.clone()
         new_tree2.root = tree2.root.clone()
+
         tree1_vars, tree1_nodes = new_tree1.collect_nodes(new_tree1.root)
         tree2_vars, tree2_nodes = new_tree2.collect_nodes(new_tree2.root)
 
@@ -315,7 +324,7 @@ class Tree:
             subtree1_node,subtree1_depth,subtree1_len = subtree1_triple 
 
             #We check that the subtree we are considering can be swapped: the variables in it are also present somewhere else in the same tree
-            subtree1_vars,_=tree1.collect_nodes(subtree1_node)
+            subtree1_vars,_=self.collect_nodes(subtree1_node)
             subtree1_var_count=Tree.count_vars(subtree1_vars)
 
             #Difference between the 2 dictionaries: if the difference for one of the variables is <0 means that the variable only appears in the subtree, so we can't swap it
@@ -331,7 +340,7 @@ class Tree:
             #General assumption: LEN_subtree1<=MAX_DEPTH-DEPTH_subtree2. This must hold for each subtree in the other tree
             #The LEN_subtree1 must be <= MAX_DEPTH-DEPTH_subtree2 that is: if we add the subtree2 to subtree1, the resulting tree must have a depth <= MAX_DEPTH
             #Then, we check also the other way around (after the 'end'): LEN_subtree2<=MAX_DEPTH-DEPTH_subtree1
-            subtree_to_consider_in_tree2=[i[0] for i in tree2_nodes if (subtree1_len <=Tree.max_depth -i[1]) and i[2]<=Tree.max_depth- subtree1_depth]
+            subtree_to_consider_in_tree2=[i[0] for i in tree2_nodes if (subtree1_len <=self.max_depth -i[1]) and i[2]<=self.max_depth- subtree1_depth]
 
             #Iterate for each suitable node of the second tree
             for subtree2_node in subtree_to_consider_in_tree2: 
@@ -664,11 +673,11 @@ class Tree:
     
     #if the branches are too deep (over max_depth) collapse the ones that do not contain variables replacing them with their constant value
     @staticmethod
-    def collapse_branch(node, current_depth=0,force_collapse=False):
+    def collapse_branch(node, current_depth=0,force_collapse=False,max_depth=10):
         if node is None:
             return None
         
-        if current_depth > Tree.max_depth+1 or force_collapse: #FIXME: keep the +1?
+        if current_depth > max_depth+1 or force_collapse: #FIXME: keep the +1?
             vars_in_subtree = Tree.find_var_in_subtree(node)
 
             if len(vars_in_subtree) == 0 and node.node_type != NodeType.CONST:
