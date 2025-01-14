@@ -747,13 +747,13 @@ class Tree:
 
     
     
-    #if the branches are too deep (over max_depth) collapse the ones that do not contain variables replacing them with their constant value
+    #if the branches are too deep (over max_depth) or force_collapse is set to True collapse the ones that do not contain variables replacing them with their constant value
     @staticmethod
     def collapse_branch(node, current_depth=0,force_collapse=False,max_depth=10):
         if node is None:
             return None
         
-        if current_depth > max_depth+1 or force_collapse: #FIXME: keep the +1?
+        if current_depth > max_depth+1 or force_collapse: 
             vars_in_subtree = Tree.find_var_in_subtree(node)
 
             if len(vars_in_subtree) == 0 and node.node_type != NodeType.CONST:
