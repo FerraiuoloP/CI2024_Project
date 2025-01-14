@@ -1,4 +1,5 @@
 import math
+import re
 from enum import Enum
 import numpy as np
 import matplotlib.pyplot as plt  
@@ -49,6 +50,8 @@ class Node:
             left = self.left.to_np_formula()
             right = self.right.to_np_formula()
             return f"np.{self.value.__name__}({left}, {right})"
+  
+
 
 class Tree:
     # _memo_cache = {}
@@ -668,6 +671,79 @@ class Tree:
     def to_np_formula(self):
         return self.root.to_np_formula()
     
+    @staticmethod
+    def is_float(value):
+        try:
+            float(value)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def split_arguments(arguments):
+        """
+        Split np function arguments based on parenthesis and commas.
+        Es:"np.multiple(x[1],2),np.div(1,2)" -> ["np.multiple(x[1],2)", "np.div(1,2)"]
+        """
+        args = []
+        bracket_level = 0
+        current_arg = []
+        for char in arguments:
+            if char == ',' and bracket_level == 0:
+                args.append("".join(current_arg))
+                current_arg = []
+            else:
+                if char == '(':
+                    bracket_level += 1
+                elif char == ')':
+                    bracket_level -= 1
+                current_arg.append(char)
+        if current_arg:
+            args.append("".join(current_arg))
+        return args
+
+    
+
+    @staticmethod
+    def parse_expression(expression):
+        expression = expression.replace(" ", "")
+        if expression.startswith("np."):
+            # Extracting function name and arguments
+            match = re.match(r"np\.(\w+)\((.*)\)", expression)
+            if not match:
+                raise ValueError(f"Espressione non valida: {expression}")
+            
+            operation = match.group(1)  # Function name
+            arguments = match.group(2)  # Args
+            
+            args = Tree.split_arguments(arguments)
+            
+            np_func = getattr(np, operation)
+           
+            _node_type = NodeType.B_OP if np_func.nargs-1 == 2 else NodeType.U_OP
+            root = Node(value=np_func,node_type=_node_type)
+            
+            # Recursive calls
+            if len(args) > 0:
+                root.left = Tree.parse_expression(args[0])  
+            if len(args) > 1:
+                root.right = Tree.parse_expression(args[1])
+            
+            return root
+        
+        elif expression.isdigit() or Tree.is_float(expression):
+            return Node(node_type=NodeType.CONST, value=float(expression))
+        elif expression.startswith("x[") and expression.endswith("]"):
+            return Node(node_type=NodeType.VAR, value="x"+expression[2:-1])
+        else:
+            raise ValueError(f"Espressione non riconosciuta: {expression}")
+
+    @staticmethod
+    def create_tree_from_np_formula(formula):
+        empty = Tree(empty=True)
+        empty.root = Tree.parse_expression(formula)
+        empty.compute_fitness()
+        return empty
 
     
     
@@ -737,63 +813,12 @@ binary_ops = [
 # t = Tree(2)
 # t.print_tree()
 def main():
-    np.random.seed(4)
-    np.seterr(all="ignore") #ignore np warnings, the output will be nan or inf and will be handled correctly in the code. (using np.errstate slows down the code)
-    x= [[1] for i in range(20)]
-    Tree.set_params(unary_ops, binary_ops, 3, 100,4, np.array(x),np.array([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]))
-    t=Tree("full",require_valid_tree=True)
-    t.add_drawing()
+    empty = Tree(empty=True)
+    empty.root = Tree.parse_expression(
+"np.add(np.sin(x[1]), np.divide(np.remainder(np.minimum(-8.451369004001418, x[0]), np.add(x[4], x[5])), np.remainder(np.exp(x[3]), np.arctan(x[2]))))"        
+)
+    empty.add_drawing()
 
-    t.mutate_subtree()
-    t.add_drawing()
-
-    # Tree.set_params(unary_ops, binary_ops, 3, 100,6, np.array(x),np.array([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]))
-    # # xd,xd2=t.collect_nodes(t.root)
-    # # xd=[f"[{str(i[0])},{i[1]},{i[2]}]"  for i in xd]
-    # # xd2=[f"[{str(i[0])},{i[1]},{i[2]}]" for i in xd2]
-    # # print(xd)
-    # # print(xd2)
-   
-  
-    # t1=Tree("full",require_valid_tree=True)
-    # t1.add_drawing()
-
-
-    # t2,t3=Tree.crossover(t,t1)
-    # t2.add_drawing()
-    # t3.add_drawing()
-
-
-    # # print(t.to_np_formula())
-   
-    # t.compute_fitness()
-    # print(t.fitness)
-    # t.print_tree()
-    
-
-def maxDepth(s):
-
-	count = 0
-	st = []
-
-	for i in range(len(s)):
-		if (s[i] == '('):
-			st.append(i) # pushing the bracket in the stack
-		elif (s[i] == ')'):
-			if (count < len(st)):
-				count = len(st)
-			# keeping track of the parenthesis and storing
-			# it before removing it when it gets balanced
-			st.pop()
-		
-	return count
-
-def count_vars2(vars_list):
-            #count the instances of each variable in the trees
-            var_count = {var: 0 for var in Tree.vars}
-            for var in vars_list:
-                var_count[var.value] += 1
-            return var_count
 
 
 if __name__ == "__main__":
