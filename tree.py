@@ -24,7 +24,7 @@ class Node:
         if self.node_type in {NodeType.B_OP, NodeType.U_OP}:
             return str(self.value.__name__) if callable(self.value) else str(self.value)
         elif self.node_type == NodeType.CONST:
-            return str(int(round(self.value)))  #TODO: REMOVE round while printing
+            return str(int(round(self.value)))  
         else:    
             return str(self.value)
     def clone(self):
@@ -35,7 +35,7 @@ class Node:
         return new_node
     
 
-    def to_np_formula(self):
+    def to_np_formula_rec(self,use_std_operators=False):
         if self.value is None:
             return None
         if self.node_type == NodeType.CONST:
@@ -44,11 +44,23 @@ class Node:
             return "x["+self.value[1:]+"]"
             # return self.value
         if self.node_type == NodeType.U_OP:
-            operand = self.right.to_np_formula() if self.left is None else self.left.to_np_formula()
+            operand = self.right.to_np_formula_rec(use_std_operators) if self.left is None else self.left.to_np_formula_rec(use_std_operators)
+            if use_std_operators:
+                if(self.value.__name__=="negative"):
+                    return f"-({operand})"
             return f"np.{self.value.__name__}({operand})"
         if self.node_type == NodeType.B_OP:
-            left = self.left.to_np_formula()
-            right = self.right.to_np_formula()
+            left = self.left.to_np_formula_rec(use_std_operators)
+            right = self.right.to_np_formula_rec(use_std_operators)
+            if use_std_operators:
+                if(self.value.__name__=="add"):
+                    return f"({left} + {right})"
+                if(self.value.__name__=="subtract"):
+                    return f"({left} - {right})"
+                if(self.value.__name__=="multiply"):
+                    return f"({left} * {right})"
+                if(self.value.__name__=="divide"):
+                    return f"({left} / {right})"
             return f"np.{self.value.__name__}({left}, {right})"
   
 
@@ -56,7 +68,7 @@ class Node:
 class Tree:
     # _memo_cache = {}
     # _cache_limit = 1000  
-    _VAR_DUP_PROB = 0.15 # NOTE: keep this low for now since we need to implement properly the mutation and recombination of trees with duplicated variables
+    _VAR_DUP_PROB = 0.1 
 
 
     @staticmethod
@@ -588,7 +600,7 @@ class Tree:
             y_data = np.concatenate((Tree.y_train,Tree.y_test))
 
         # Conver the formula in a pre-compiled lambda function
-        formula = self.to_np_formula()  
+        formula = self.root.to_np_formula_rec()  
         eval_formula = eval(f"lambda x: {formula}",{"np": np, "nan": np.nan, "inf": np.inf}) 
 
         # Exploiting np broadcasting
@@ -668,8 +680,8 @@ class Tree:
     #     plt.show()
 
     
-    def to_np_formula(self):
-        return self.root.to_np_formula()
+    def to_np_formula(self,use_std_operators=False):
+        return self.root.to_np_formula_rec(use_std_operators=use_std_operators)
     
     @staticmethod
     def is_float(value):
@@ -757,7 +769,7 @@ class Tree:
             vars_in_subtree = Tree.find_var_in_subtree(node)
 
             if len(vars_in_subtree) == 0 and node.node_type != NodeType.CONST:
-                eval_formula = eval(f"lambda x: {node.to_np_formula()}")
+                eval_formula = eval(f"lambda x: {node.to_np_formula_rec()}")
                 # print("collapsed")
                 ev = eval_formula(np.zeros(Tree.n_var))
                 
