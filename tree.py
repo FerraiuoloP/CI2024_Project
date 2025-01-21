@@ -66,8 +66,6 @@ class Node:
 
 
 class Tree:
-    # _memo_cache = {}
-    # _cache_limit = 1000  
     _VAR_DUP_PROB = 0.1 
 
 
@@ -212,9 +210,6 @@ class Tree:
                               
                 
      
-    
-
-
     def print_tree(self):
         self.print_tree_recursive(self.root, 0)
 
@@ -387,79 +382,6 @@ class Tree:
 
 
 
-#    @staticmethod
-#     def crossover(tree1, tree2):
-#         new_tree1 = Tree(empty=True)
-#         new_tree2 = Tree(empty=True)
-#         new_tree1.root = tree1.root.clone()
-#         new_tree2.root = tree2.root.clone()
-#         tree1_vars, tree1_nodes = new_tree1.collect_nodes(new_tree1.root)
-#         tree2_vars, tree2_nodes = new_tree2.collect_nodes(new_tree2.root)
-
-#         #shuffle
-#         np.random.shuffle(tree1_nodes)
-#         np.random.shuffle(tree2_nodes)
-
-#         def count_vars(vars_list):
-#             #count the instances of each variable in the trees
-#             var_count = {var: 0 for var in Tree.vars}
-#             for var in vars_list:
-#                 var_count[var.value] += 1
-#             return var_count
-        
-    
-#         tree1_var_count = count_vars(tree1_vars)
-     
-        
-#         found_subtree1=False
-#         while len(tree1_nodes)>0 and not found_subtree1:
-#             subtree1=tree1_nodes.pop(0)
-#             subtree1_vars,_=tree1.collect_nodes(subtree1)
-#             subtree1_var_count=count_vars(subtree1_vars)
-#             #difference between the 2 dictionaries
-#             diff1 = {k: tree1_var_count[k] - subtree1_var_count[k] for k in Tree.vars}
-#             #if each of the values in diff1 is >0 then we set found_subtree to True
-#             found_subtree1 = all(v > 0 for v in diff1.values())
-            
-
-
-#         if(not found_subtree1): 
-#             return None,None
-
-#         tree2_var_count = count_vars(tree2_vars)
-
-#         found_subtree2=False
-#         while len(tree2_nodes)>0 and not found_subtree2:
-#             subtree2=tree2_nodes.pop(0)
-#             subtree2_vars,_=tree2.collect_nodes(subtree2)
-#             subtree2_var_count=count_vars(subtree2_vars)
-#             #difference between the 2 dictionaries
-#             diff2 = {k: tree2_var_count[k] - subtree2_var_count[k] for k in Tree.vars}
-#             #if each of the values in diff2 is >0 then we set found_subtree to True
-#             found_subtree2 = all(v > 0 for v in diff2.values())
-
-
-
-#         if(not found_subtree2):
-#             return None,None
-
-#         subtree1.node_type, subtree2.node_type = subtree2.node_type, subtree1.node_type
-#         subtree1.value, subtree2.value = subtree2.value, subtree1.value
-#         subtree1.left, subtree2.left = subtree2.left, subtree1.left
-#         subtree1.right, subtree2.right = subtree2.right, subtree1.right
-
-#         return new_tree1, new_tree2
-
-    # def find_subtree_without_var(self, node):
-    #     if node is None:
-    #         return []
-    #     subtrees = []
-    #     if node.node_type != NodeType.VAR and not Tree.find_var_in_subtree(node):
-    #         subtrees.append(node)
-    #     subtrees += self.find_subtree_without_var(node.left)
-    #     subtrees += self.find_subtree_without_var(node.right)
-    #     return subtrees
-
 
     """
     @return: Two lists of tuples. The first list contains the variables in the tree, the second list contains the other nodes.
@@ -553,39 +475,7 @@ class Tree:
         
 
 
-
-    #NEW IMPLEMENTATION IS LIKE 25x FASTER, delete this if the other works properly
-    # #mean squared error
-    # def compute_fitness2(self,test="train"):
-    #     if(test=="train"):
-    #         x_data = Tree.x_train
-    #         y_data = Tree.y_train
-    #     if(test=="test"):
-    #         x_data = Tree.x_test
-    #         y_data = Tree.y_test
-    #     if(test=="all"):
-    #         x_data = np.concatenate((Tree.x_train,Tree.x_test),axis=1)
-    #         y_data = np.concatenate((Tree.y_train,Tree.y_test))
-    #     if x_data.shape[0] == 0 or x_data.shape[1] == 0:
-    #         self.fitness = np.inf
-    #         return
-    #     squared_errors = 0
-    #     # print(x_data.shape[1])
-    #     # formula=self.to_np_formula()
-    #     # eval_formula=eval(f"lambda x: {formula}")
-
-    #     for i in range(x_data.shape[1]):
-    #         # y_pred = eval_formula(x_data[:, i])
-    #         y_pred = self.evaluate_tree(x_data[:, i])
-    #         if np.isnan(y_pred) or np.isinf(y_pred):
-    #             self.fitness = np.inf
-    #             return
-    #         squared_errors += np.square(y_data[i] - y_pred) 
-    #     self.fitness = squared_errors / x_data.shape[1]
-
-    #     return       
     
-
 
 
     def compute_fitness(self,test="train"):
@@ -625,59 +515,17 @@ class Tree:
                 color = 'red' if node.node_type == NodeType.VAR else 'lightblue'  # VAR nodes are red
                 plt.text(x, y, str(node), ha='center', bbox=dict(boxstyle='round,pad=0.3', edgecolor='black', facecolor=color))
                 if node.left is not None:
-                    plt.plot([x, x - dx], [y - dy / 2, y - dy], color='black')
+                    plt.plot([x, x - dx], [y - dy / 2, y - dy], color='black') #line to left
                     draw_node(node.left, x - dx, y - dy, dx / 2, dy)
                 if node.right is not None:
-                    plt.plot([x, x + dx], [y - dy / 2, y - dy], color='black')
+                    plt.plot([x, x + dx], [y - dy / 2, y - dy], color='black') #line to right
                     draw_node(node.right, x + dx, y - dy, dx / 2, dy)
 
-        plt.figure(figsize=(12, 8))
+        plt.figure(figsize=(10, 7))
         plt.axis('off')
         draw_node(self.root, 0, 0, 20, 2)
         plt.show()
 
-
-    # def add_drawing(self):
-    #     """ 
-    #     Draws the tree using matplotlib.
-    #     """
-        
-    #     def draw_node(node, x, y, dx, dy, level=0):
-    #         if node is not None:
-    #             color = 'red' if node.node_type == NodeType.VAR else 'lightblue'  # VAR nodes are red
-    #             label = str(node)
-                
-    #             # Dynamic size (smaller font for deeper levels)
-    #             fontsize = max(10, 20 - level) 
-                
-    #             # Draw the node
-    #             plt.text(x, y, label, ha='center', va='center', fontsize=fontsize,
-    #                     bbox=dict(boxstyle='round,pad=0.3', edgecolor='black', facecolor=color))
-                
-    #             # Recursively draw the left and right children if they exist
-    #             if node.left is not None:
-    #                 plt.plot([x, x - dx], [y - dy / 2, y - dy], color='black', lw=2)
-    #                 draw_node(node.left, x - dx, y - dy, dx / 2, dy, level + 1)
-                
-    #             if node.right is not None:
-    #                 plt.plot([x, x + dx], [y - dy / 2, y - dy], color='black', lw=2)
-    #                 draw_node(node.right, x + dx, y - dy, dx / 2, dy, level + 1)
-
-    #     # Setup figure size and remove axis
-    #     plt.figure(figsize=(12, 8))
-    #     plt.axis('off')
-
-    #     # Calculate dynamic dx and dy based on tree size
-    #     tree_height = self.max_depth if hasattr(self, 'max_depth') else 3  # default max_depth is 3 if not specified
-    #     dx = max(20, 40 / tree_height)  # Adjust horizontal distance based on tree depth
-    #     dy = max(2, 4 / tree_height)    # Adjust vertical distance based on tree depth
-
-    #     # Start the recursive drawing process
-    #     draw_node(self.root, 0, 0, dx, dy)
-
-    #     # Optional: Adjust the padding to prevent clipping of the nodes
-    #     plt.tight_layout(pad=2)
-    #     plt.show()
 
     
     def to_np_formula(self,use_std_operators=False):
@@ -748,7 +596,7 @@ class Tree:
         elif expression.startswith("x[") and expression.endswith("]"):
             return Node(node_type=NodeType.VAR, value="x"+expression[2:-1])
         else:
-            raise ValueError(f"Espressione non riconosciuta: {expression}")
+            raise ValueError(f"Invalid expression: {expression}")
 
     @staticmethod
     def create_tree_from_np_formula(formula):
@@ -794,56 +642,15 @@ class Tree:
 
      
 
-unary_ops = [
-    np.negative,
-    np.abs,
-    np.sqrt,
-    np.exp,
-    np.log,
-    np.sin,
-    np.cos,
-    np.tan,
-    np.arcsin,
-    np.arccos,
-    np.arctan,
-    np.ceil,
-    np.floor
-]
 
-binary_ops = [
-    np.add,
-    np.subtract,
-    np.multiply,
-    np.divide,
-    np.power,
-    np.maximum,
-    np.minimum,
-    np.mod
-]
 
-# Tree.set_params(unary_ops, binary_ops, 3, 10)  
-# t = Tree(2)
-# t.print_tree()
+
 def main():
-    empty = Tree(empty=True)
-    empty.root = Tree.parse_expression(
-"np.add(np.sin(x[1]), np.divide(np.remainder(np.minimum(-8.451369004001418, x[0]), np.add(x[4], x[5])), np.remainder(np.exp(x[3]), np.arctan(x[2]))))"        
-)
-    empty.add_drawing()
+    return
 
 
 
 if __name__ == "__main__":
-    # s = "np.power(np.add(np.subtract(np.multiply(np.remainder(np.subtract(np.maximum(-30.84045049228496, -74.14319824641566), np.add(-67.51952574430581, 66.2449211244043)), np.power(np.power(-92.81856749082138, -4.158849753764187), np.maximum(x[8], -49.65853756333259))), np.subtract(np.minimum(np.power(91.93377534586068, -85.82961141527667), np.minimum(x[10], -46.572100301288486)), np.remainder(np.add(94.66591430218702, 36.2219989815153), np.maximum(21.305047398470194, x[9])))), np.maximum(np.remainder(np.power(np.divide(-11.080554883890969, 22.148790025225807), np.divide(-86.55918974862678, 44.81232498297484)), np.multiply(np.subtract(x[5], 78.1130339608423), np.multiply(16.89709916522277, 98.04247961127152))), np.divide(np.multiply(np.multiply(84.5757783109728, 42.47768126071122), np.add(x[4], -32.40192770355243)), np.divide(np.multiply(-84.2330636334321, x[16]), np.remainder(85.43081758653614, 86.40686436605807))))), np.divide(np.power(np.remainder(np.multiply(np.power(x[10], x[16]), np.minimum(-89.8044741630617, -27.508293200009376)), np.add(np.maximum(-30.49762415792597, 34.692249370529396), np.power(5.441707006218309, 62.46846558895308))), np.divide(np.multiply(np.multiply(x[15], 71.90362718674143), np.multiply(75.19810211056495, -97.27396600081799)), np.power(np.subtract(-86.48039060781264, x[18]), np.subtract(-43.71704848649915, -35.699519013288025)))), np.divide(np.subtract(np.subtract(np.minimum(x[4], -41.46282691605509), np.remainder(-35.28482468595506, x[3])), np.power(np.minimum(-1.8416430576277492, 11.083557711230213), np.remainder(x[11], x[2]))), np.power(np.add(np.subtract(x[12], 82.10842094348274), np.minimum(-21.415362849911347, -83.06962672811605)), np.divide(np.power(-79.09034709261033, 69.91321000226674), np.remainder(x[19], x[2])))))), np.multiply(np.add(np.maximum(np.power(np.power(np.add(-48.73837771366749, -80.88125396873366), np.subtract(-70.42262001738715, 84.30152970807234)), np.remainder(np.multiply(8.060092266617374, -10.986099909121066), np.subtract(-58.65037257121026, -29.660794426263408))), np.power(np.subtract(np.subtract(-54.15714913929077, -32.40256410842473), np.remainder(-72.43664692976309, 11.715719016366052)), np.maximum(np.add(18.636317718992018, x[0]), np.power(-73.40707841020446, 58.96530547436771)))), np.multiply(np.maximum(np.power(np.multiply(x[1], 61.341905198702364), np.minimum(-24.61150459408792, 26.565191995543884)), np.remainder(np.power(-37.255100220120156, 3.7947546437911512), np.minimum(26.46741841119362, 9.366732257655897))), np.divide(np.add(np.remainder(49.28663498099192, -32.71608497711573), np.remainder(5.633993847939436, 21.704940596722807)), np.multiply(np.power(-22.816756961821213, -63.669747219237635), np.maximum(2.878546524340564, 2.4234572367660974))))), np.divide(np.maximum(np.remainder(np.remainder(np.subtract(x[19], x[13]), np.power(x[6], -6.086815827142743)), np.subtract(np.power(47.22223380607039, -9.232581883520524), np.add(x[14], -7.9648013320643685))), np.maximum(np.multiply(np.remainder(-45.34827852837107, -75.65482429634606), np.multiply(x[6], 34.71514120997742)), np.multiply(np.subtract(-42.08733847435677, 90.97000701771921), np.minimum(x[7], -59.012398693044176)))), np.remainder(np.divide(np.power(np.multiply(29.46894244988215, -61.37722772136141), np.maximum(x[15], -85.00986964239314)), np.maximum(np.divide(x[1], -15.201248555199356), np.subtract(67.38169786073428, x[5]))), np.divide(np.add(np.multiply(43.82476717689315, 15.764198377982169), np.divide(25.87263873147316, x[17])), np.maximum(np.minimum(-11.85424889329208, 88.97968466219476), np.maximum(12.660283870728549, -82.3832836904882)))))))"
-    # cProfile.run("maxDepth(s)")
     main()
 
 
-
-
-
-# Driver program
-
-
-   
-# print(t.evaluate_tree([1, 2, 3]))
