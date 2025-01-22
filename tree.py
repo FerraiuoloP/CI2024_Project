@@ -70,12 +70,14 @@ class Tree:
 
 
     @staticmethod
-    def set_params(unary_ops, binary_ops, n_var, max_const, x_train_norm, y_train_norm, x_test_norm=None, y_test_norm=None):
+    def set_params(unary_ops, binary_ops, n_var, max_const,max_depth,spawn_depth, x_train_norm, y_train_norm, x_test_norm=None, y_test_norm=None):
         Tree.unary_ops = unary_ops
         Tree.binary_ops = binary_ops
         Tree.n_var = n_var
         Tree.vars = [f'x{i}' for i in range(Tree.n_var)]
         Tree.max_const = max_const
+        Tree.max_depth = max_depth
+        Tree.spawn_depth= spawn_depth
         Tree.x_train = x_train_norm
         Tree.y_train = y_train_norm
         Tree.x_test = x_test_norm
@@ -84,11 +86,9 @@ class Tree:
 
 
 
-    def __init__(self, method="full", require_valid_tree=True, empty=False, max_depth=10,spawn_depth=5):
+    def __init__(self, method="full", require_valid_tree=True, empty=False):
         # Valid tree means a tree that has a computable fitness (no division by zero, no overflow, etc.)
         # print(f"--Creating tree with max_depth:{max_depth} and spawn_depth:{spawn_depth}")
-        self.max_depth = max_depth
-        self.spawn_depth = spawn_depth
         self.age = 0    # NOTE: it's just a test for select_parents_fitness_age
         self.fitness = np.inf
         self.root = None
@@ -108,7 +108,7 @@ class Tree:
         #First create the leaves of the tree. Every variable should be placed in the tree at least once!
         for var in  Tree.vars:
             leaves.append(Node(NodeType.VAR, value=var))
-        while len(leaves) < 2 ** self.spawn_depth:
+        while len(leaves) < 2 ** Tree.spawn_depth:
             if(np.random.rand()<Tree._VAR_DUP_PROB): #Duplicate a variable
                 value_idx=random.randint(0,Tree.n_var-1)
                 leaves.append(Node(NodeType.VAR, value=Tree.vars[value_idx]))
@@ -117,7 +117,7 @@ class Tree:
 
         #Then build the tree recursively
         def build_tree(leaves_to_place, current_depth):
-            if current_depth == self.spawn_depth:
+            if current_depth == Tree.spawn_depth:
                 return leaves_to_place.pop(0)
             value_idx=random.randint(0,len(Tree.binary_ops)-1)
             node = Node(NodeType.B_OP, value=Tree.binary_ops[value_idx])
@@ -131,10 +131,10 @@ class Tree:
   
     def populate_tree_grow_method(self,max_depth=None,must_include_vars=None): 
         #max_depth and must_include_vars are set if creating a subtree: a tree wtih custom depth and do not need to include all the variables
-        # print(f"Creating tree with max_depth:{self.max_depth} and spawn_depth:{self.spawn_depth}")
+        # print(f"Creating tree with max_depth:{Tree.max_depth} and spawn_depth:{Tree.spawn_depth}")
         if max_depth is None:
             #Pick a number of leaves between Tree.n_var and 2^max_depth
-            n_leaves = np.random.randint(Tree.n_var, 2 ** self.spawn_depth +1)#+1 cause high val is exclusive
+            n_leaves = np.random.randint(Tree.n_var, 2 ** Tree.spawn_depth +1)#+1 cause high val is exclusive
         else:
             if must_include_vars is None or len(must_include_vars) == 0:
                 n_leaves = np.random.randint(1, 2 ** max_depth +1)
@@ -162,7 +162,7 @@ class Tree:
         #Then build the tree recursively
         def build_tree(leaves_to_place, current_depth,max_depth=None):
             if max_depth is None:
-                max_depth=self.spawn_depth
+                max_depth=Tree.spawn_depth
 
             if current_depth == max_depth:#enter here only if we reached the max depth, place the last leaf
                 return leaves_to_place.pop(0)
@@ -240,7 +240,7 @@ class Tree:
         variables_tree=Tree.count_vars(variables_tree_tripe)
 
         #choose a node that is not at the max depth
-        valid_nodes=[i for i in variables_tree_tripe+other_nodes_triple if i[1]<self.max_depth]
+        valid_nodes=[i for i in variables_tree_tripe+other_nodes_triple if i[1]<Tree.max_depth]
         pick_idx=random.randint(0,len(valid_nodes)-1)
         picked_node_triple=valid_nodes[pick_idx]
         picked_node,picked_depth,_ = picked_node_triple
@@ -259,7 +259,7 @@ class Tree:
         # next(res)
     
  
-        max_possible_depth = self.max_depth - picked_depth
+        max_possible_depth = Tree.max_depth - picked_depth
         # print("Max possible depth: ",max_possible_depth)
  
         
@@ -271,7 +271,7 @@ class Tree:
             picked_node.right = new_subtree.right
 
     def copy_tree(self):
-        new_tree = Tree(empty=True,max_depth=self.max_depth,spawn_depth=self.spawn_depth)
+        new_tree = Tree(empty=True)
         new_tree.root = self.root.clone()
         new_tree.fitness = self.fitness
         return new_tree
@@ -305,8 +305,8 @@ class Tree:
 
     def crossover(self, tree2):
         # TODO: increment tree age in crossover for select_parents_fitness_age (?)
-        new_tree1 = Tree(empty=True,max_depth=self.max_depth,spawn_depth=self.spawn_depth)
-        new_tree2 = Tree(empty=True,max_depth=tree2.max_depth,spawn_depth=tree2.spawn_depth)
+        new_tree1 = Tree(empty=True)
+        new_tree2 = Tree(empty=True)
         new_tree1.root = self.root.clone()
         new_tree2.root = tree2.root.clone()
 
@@ -350,7 +350,7 @@ class Tree:
             #General assumption: LEN_subtree1<=MAX_DEPTH-DEPTH_subtree2. This must hold for each subtree in the other tree
             #The LEN_subtree1 must be <= MAX_DEPTH-DEPTH_subtree2 that is: if we add the subtree2 to subtree1, the resulting tree must have a depth <= MAX_DEPTH
             #Then, we check also the other way around (after the 'end'): LEN_subtree2<=MAX_DEPTH-DEPTH_subtree1
-            subtree_to_consider_in_tree2=[i[0] for i in tree2_nodes if (subtree1_len <=self.max_depth -i[1]) and i[2]<=self.max_depth- subtree1_depth]
+            subtree_to_consider_in_tree2=[i[0] for i in tree2_nodes if (subtree1_len <=Tree.max_depth -i[1]) and i[2]<=Tree.max_depth- subtree1_depth]
 
             #Iterate for each suitable node of the second tree
             for subtree2_node in subtree_to_consider_in_tree2: 
